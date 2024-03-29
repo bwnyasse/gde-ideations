@@ -5,50 +5,54 @@ class ExploreCommand extends Command<void> {
   @override
   final name = 'explore';
   @override
-  final description = 'Explore the file system';
+  final description = 'Explore the file system.';
 
   ExploreCommand() {
     argParser
       ..addOption(
-        'depth',
-        abbr: 'd',
+        'level',
+        abbr: 'L',
         defaultsTo: '0',
-        help: 'Depth limit for folder exploration',
+        help: 'Descend only level directories deep.',
       )
       ..addOption(
-        'filter',
-        abbr: 'f',
-        help: 'Filter files and folders by name',
+        'pattern',
+        abbr: 'P',
+        help:
+            'List only those files that match the pattern given (supports wildcards and regular expressions)',
       )
       ..addFlag(
         'directories',
-        abbr: 'D',
-        help: 'List directories only',
+        abbr: 'd',
+        help: 'List directories only.',
       )
       ..addFlag(
         'size',
         abbr: 's',
-        help: 'Print the size in bytes of each file',
+        help: 'Print the size in bytes of each file.',
       )
       ..addFlag(
-        'sort-by-time',
-        abbr: 't',
-        help: 'Sort files by last modification time',
+        'date',
+        abbr: 'D',
+        help: 'Print the date of last modification.-d',
       );
   }
 
   @override
   void run() async {
-    final depthLimit = int.parse(argResults?['depth']);
-    final filter = argResults?['filter'];
-    final directories = argResults?['directories'];
-    final size = argResults?['size'];
-    final sort_by_time = argResults?['sort-by-time'];
+    final level = int.parse(argResults?['level']);
+    final pattern = argResults?['pattern'];
+    final dirOnly = argResults?['directories'];
+    final showSize = argResults?['size'];
+    final showDate = argResults?['date'];
 
     final folderService = FolderService();
     final folderTree = await folderService.exploreFileSystem(
-      depthLimit: depthLimit,
-      filter: filter,
+      level: level,
+      pattern: pattern,
+      dirOnly: dirOnly,
+      showSize: showSize,
+      showDate: showDate,
     );
 
     print(folderTree);
