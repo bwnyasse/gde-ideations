@@ -34,7 +34,7 @@ class ExploreCommand extends Command<void> {
       ..addFlag(
         'date',
         abbr: 'D',
-        help: 'Print the date of last modification.-d',
+        help: 'Print the date of last modification.',
       );
   }
 
