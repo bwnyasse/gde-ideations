@@ -19,20 +19,23 @@ class ExploreCommand extends Command<void> {
         'pattern',
         abbr: 'P',
         help:
-            'List only those files that match the pattern given (supports wildcards and regular expressions)',
+            'List only those files that match the pattern given.',
       )
       ..addFlag(
         'directories',
+        negatable: false,
         abbr: 'd',
         help: 'List directories only.',
       )
       ..addFlag(
         'size',
+        negatable: false,
         abbr: 's',
         help: 'Print the size in bytes of each file.',
       )
       ..addFlag(
         'date',
+        negatable: false,
         abbr: 'D',
         help: 'Print the date of last modification.',
       );
