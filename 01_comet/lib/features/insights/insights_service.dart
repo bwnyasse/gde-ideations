@@ -1,7 +1,5 @@
+import 'package:comet/features/insights/agents/gemini_agent.dart';
 import 'package:comet/models/insight_model.dart';
-import 'package:comet/services/folder_service.dart';
-import 'package:comet/services/gemini_service.dart';
-import 'package:comet/services/llm_service.dart';
 
 class AIService {
   final String _aiModel;
@@ -16,12 +14,11 @@ class AIService {
     bool shouldProvidePerformanceInsights = false,
     bool shouldProvideTestabilityInsights = false,
   }) async {
-    final folderService = FolderService();
     final insights = <Insight>[];
-    LLMService llmService;
+    LLMAgent agent;
     switch (_aiModel) {
       case 'gemini':
-        llmService = GeminiService();
+        agent = GeminiAgent();
         break;
       default:
         throw ArgumentError('Invalid AI model: $_aiModel');
@@ -29,4 +26,29 @@ class AIService {
 
     return insights;
   }
+}
+
+
+abstract class LLMAgent {
+  Future<List<Insight>> getCodeOrganizationInsights(final prompt) async {
+    final response = await generateInsight(prompt);
+    return [
+      Insight(
+        title: 'Improve Folder Organization',
+        description: response,
+      ),
+    ];
+  }
+
+  Future<List<Insight>> getCodeQualityInsights(final prompt) async {
+    final response = await generateInsight(prompt);
+    return [
+      Insight(
+        title: 'Improve Code Quality',
+        description: response,
+      ),
+    ];
+  }
+
+  Future<String> generateInsight(String prompt);
 }

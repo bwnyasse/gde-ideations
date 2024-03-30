@@ -1,8 +1,8 @@
-class Insight {
+class Insights {
   final String title;
   final String description;
 
-  Insight({
+  Insights({
     required this.title,
     required this.description,
   });

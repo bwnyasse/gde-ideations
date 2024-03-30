@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:comet/commands/explore_command.dart';
-import 'package:comet/commands/insights_command.dart';
+import 'package:comet/features/explore/explore_command.dart';
+import 'package:comet/features/insights/insights_command.dart';
 
 Future<void> main(List<String> arguments) async {
   final runner =

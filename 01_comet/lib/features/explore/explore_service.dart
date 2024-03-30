@@ -1,9 +1,8 @@
 import 'dart:io';
-import 'package:comet/models/file_model.dart';
-import 'package:comet/models/folder_model.dart';
+import 'package:comet/features/explore/explore_model.dart';
 import 'package:path/path.dart' as path;
 
-class FolderService {
+class ExploreService {
   Future<FolderModel> exploreFileSystem({
     int level = 5,
     String? pattern,

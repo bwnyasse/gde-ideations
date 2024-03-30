@@ -1,5 +1,5 @@
 import 'package:args/command_runner.dart';
-import 'package:comet/services/folder_service.dart';
+import 'package:comet/features/explore/explore_service.dart';
 
 class ExploreCommand extends Command<void> {
   @override
@@ -49,7 +49,7 @@ class ExploreCommand extends Command<void> {
     final showSize = argResults?['size'];
     final showDate = argResults?['date'];
 
-    final folderService = FolderService();
+    final folderService = ExploreService();
     final folderTree = await folderService.exploreFileSystem(
       level: level,
       pattern: pattern,
