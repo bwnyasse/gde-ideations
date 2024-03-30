@@ -27,9 +27,6 @@ class AIService {
         throw ArgumentError('Invalid AI model: $_aiModel');
     }
 
-    // Generate other insights
-    // ...
-
     return insights;
   }
 }
