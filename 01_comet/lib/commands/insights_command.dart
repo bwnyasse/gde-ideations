@@ -68,10 +68,10 @@ class InsightsCommand extends Command<void> {
     final shouldProvidePerformanceInsights = argResults?['performance'];
     final shouldProvideTestabilityInsights = argResults?['testability'];
 
-    final folderService = FolderService();
+
     final aiService = AIService(aiModel);
-    final insights = await aiService.analyzeProject(
-      folderService,
+    final insights = await aiService.generateInsights(
+      
       shouldProvideCodeOrganizationInsights:
           shouldProvideCodeOrganizationInsights,
       shouldProvideCodeQualityInsights: shouldProvideCodeQualityInsights,
