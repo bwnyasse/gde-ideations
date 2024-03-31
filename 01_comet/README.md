@@ -35,6 +35,27 @@ Since Comet is not yet published on pub.dev, you'll need to generate the executa
 
 As the Comet project progresses, we plan to publish it on pub.dev, which will make the installation process much simpler. But for now, this manual compilation step is necessary to use the tool.
 
+## Generating Your Gemini API Key
+
+To interact with the Gemini AI model, you will need to obtain an API key from Google AI Studio. This key will allow you to authenticate your requests and use the AI capabilities provided by Gemini.
+
+### Obtaining Your API Key
+
+1. Visit [Google AI Studio](https://aistudio.google.com/app/) and log in or create a new account.
+
+2. Follow the instructions provided in the documentation to generate a new API key.
+
+3. Once you have your API key, keep it secure as it allows access to the Gemini AI features.
+
+### Setting Up Your Environment
+
+To keep your API key secure and not hard-coded in your application, you should use environment variables. Here's how to set up your `.env` file:
+
+1. In the root directory of your project, create a file named `.env`.
+2. Open the `.env` file in a text editor and add the following line:
+
+    GENERATIVE_AI_API_KEY=<your API key>
+
 
 ## Usage
 
