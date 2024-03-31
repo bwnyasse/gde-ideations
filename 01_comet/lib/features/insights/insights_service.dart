@@ -16,7 +16,8 @@ abstract class InsightsService {
     ];
   }
 
-  Future<List<Insights>> getCodeQualityInsights(final prompt) async {
+  Future<List<Insights>> getCodeQualityInsights() async {
+    final prompt = await getCodeQualityInsightsPrompt();
     final response = await generateInsight(prompt);
     return [
       Insights(
@@ -27,5 +28,6 @@ abstract class InsightsService {
   }
 
   Future<String> getCodeOrganizationInsightsPrompt();
+  Future<String> getCodeQualityInsightsPrompt();
   Future<String> generateInsight(String prompt);
 }

@@ -4,9 +4,32 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:dotenv/dotenv.dart';
 
 class GeminiAgent extends InsightsService {
+  final folderService = ExploreService();
+
+  @override
+  Future<String> getCodeQualityInsightsPrompt() async {
+    final content = await folderService.readLibContents();
+
+    String output = '''
+As an experienced Dart developer, please review the provided code and provide specific recommendations to improve the code quality. Focus on the following files:
+
+$content
+
+In your response, please address the following areas:
+
+1. Variable and method naming conventions: Are the names used throughout the codebase clear and descriptive, or could they be improved?
+2. Code organization and structure: Is the code organized in a way that promotes maintainability and extensibility, or are there opportunities for better separation of concerns?
+3. Potential code smells or anti-patterns: Are there any code constructs or patterns that could be refactored to improve the overall code quality?
+4. Adherence to Dart/Flutter best practices: Does the code follow established best practices for Dart and Flutter development, or are there areas that could be improved?
+5. Opportunities for performance optimization: Are there any areas in the code that could be optimized to improve performance, such as inefficient algorithms or resource-intensive operations?
+
+Please provide specific, actionable recommendations for each of these areas, referencing the relevant parts of the code where applicable. Your response should be detailed and constructive, as if you were providing feedback during a code review.
+''';
+    return output;
+  }
+
   @override
   Future<String> getCodeOrganizationInsightsPrompt() async {
-    final folderService = ExploreService();
     final folderTree = await folderService.exploreFileSystem();
     String folderTreeAsString = folderTree.toString();
 

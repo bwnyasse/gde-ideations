@@ -100,4 +100,33 @@ class ExploreService {
       return RegExp(pattern).hasMatch(entity.path);
     }
   }
+
+  Future<String> readLibContents() async {
+    final projectDir = Directory.current;
+    final libDir = Directory(path.join(projectDir.path, 'lib'));
+
+    // Check if the project has a pubspec.yaml file
+    final pubspecFile = File(path.join(projectDir.path, 'pubspec.yaml'));
+    if (!await pubspecFile.exists()) {
+      return 'This does not appear to be a Dart or Flutter project.';
+    }
+
+    final sb = StringBuffer();
+    await _readDirectory(libDir, sb, projectDir.path);
+    return sb.toString();
+  }
+
+  Future<void> _readDirectory(
+      Directory directory, StringBuffer sb, String projectDir) async {
+    for (final entity in await directory.list().toList()) {
+      if (entity is Directory) {
+        await _readDirectory(entity, sb, projectDir);
+      } else if (entity is File && entity.path.endsWith('.dart')) {
+        final relativePath = path.relative(entity.path, from: projectDir);
+        sb.writeln('File: $relativePath');
+        sb.writeln(await entity.readAsString());
+        sb.writeln();
+      }
+    }
+  }
 }

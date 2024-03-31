@@ -12,4 +12,10 @@ class GPTAgent extends InsightsService {
     // TODO: implement getCodeOrganizationInsightsPrompt
     throw UnimplementedError();
   }
+  
+  @override
+  Future<String> getCodeQualityInsightsPrompt() {
+    // TODO: implement getgetCodeQualityInsightsPrompt
+    throw UnimplementedError();
+  }
 }

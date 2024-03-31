@@ -18,8 +18,7 @@ class ExploreCommand extends Command<void> {
       ..addOption(
         'pattern',
         abbr: 'P',
-        help:
-            'List only those files that match the pattern given.',
+        help: 'List only those files that match the pattern given.',
       )
       ..addFlag(
         'directories',
@@ -38,6 +37,12 @@ class ExploreCommand extends Command<void> {
         negatable: false,
         abbr: 'D',
         help: 'Print the date of last modification.',
+      )
+      ..addFlag(
+        'read-lib',
+        negatable: false,
+        hide: true,
+        help: 'Read the lib content of Dart/Flutter project.',
       );
   }
 
@@ -48,16 +53,24 @@ class ExploreCommand extends Command<void> {
     final dirOnly = argResults?['directories'];
     final showSize = argResults?['size'];
     final showDate = argResults?['date'];
+    final readLib = argResults?['read-lib'];
 
     final folderService = ExploreService();
-    final folderTree = await folderService.exploreFileSystem(
-      level: level,
-      pattern: pattern,
-      dirOnly: dirOnly,
-      showSize: showSize,
-      showDate: showDate,
-    );
 
-    print(folderTree);
+    if (readLib) {
+      final output = await folderService.readLibContents();
+
+      print(output);
+    } else {
+      final folderTree = await folderService.exploreFileSystem(
+        level: level,
+        pattern: pattern,
+        dirOnly: dirOnly,
+        showSize: showSize,
+        showDate: showDate,
+      );
+
+      print(folderTree);
+    }
   }
 }

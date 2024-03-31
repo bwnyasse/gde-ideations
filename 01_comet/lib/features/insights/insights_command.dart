@@ -70,18 +70,43 @@ class InsightsCommand extends Command<void> {
   @override
   void run() async {
     final aiModel = argResults?['model'] as String? ?? 'gemini';
-    final shouldProvideCodeOrganizationInsights =
-        argResults?['code-organization'] as bool? ?? false;
-    final shouldProvideCodeQualityInsights =
-        argResults?['code-quality'] as bool? ?? false;
-    final shouldProvideDependencyInsights =
-        argResults?['dependencies'] as bool? ?? false;
-    final shouldProvideProjectStructureInsights =
-        argResults?['project-structure'] as bool? ?? false;
-    final shouldProvidePerformanceInsights =
-        argResults?['performance'] as bool? ?? false;
-    final shouldProvideTestabilityInsights =
-        argResults?['testability'] as bool? ?? false;
+    bool shouldProvideCodeOrganizationInsights = false;
+    bool shouldProvideCodeQualityInsights = false;
+    bool shouldProvideDependencyInsights = false;
+    bool shouldProvideProjectStructureInsights = false;
+    bool shouldProvidePerformanceInsights = false;
+    bool shouldProvideTestabilityInsights = false;
+
+    int selectedFlagCount = 0;
+
+    if (argResults?['code-organization'] as bool? ?? false) {
+      shouldProvideCodeOrganizationInsights = true;
+      selectedFlagCount++;
+    }
+    if (argResults?['code-quality'] as bool? ?? false) {
+      shouldProvideCodeQualityInsights = true;
+      selectedFlagCount++;
+    }
+    if (argResults?['dependencies'] as bool? ?? false) {
+      shouldProvideDependencyInsights = true;
+      selectedFlagCount++;
+    }
+    if (argResults?['project-structure'] as bool? ?? false) {
+      shouldProvideProjectStructureInsights = true;
+      selectedFlagCount++;
+    }
+    if (argResults?['performance'] as bool? ?? false) {
+      shouldProvidePerformanceInsights = true;
+      selectedFlagCount++;
+    }
+    if (argResults?['testability'] as bool? ?? false) {
+      shouldProvideTestabilityInsights = true;
+      selectedFlagCount++;
+    }
+
+    if (selectedFlagCount != 1) {
+      throw ArgumentError('Only one of the insights flags can be set.');
+    }
 
     final insights = <Insights>[];
     final InsightsService agent;
@@ -98,23 +123,23 @@ class InsightsCommand extends Command<void> {
     }
 
     if (shouldProvideCodeQualityInsights) {
-      insights.addAll(await agent.getCodeQualityInsights(''));
+      insights.addAll(await agent.getCodeQualityInsights());
     }
 
     if (shouldProvideDependencyInsights) {
-      insights.addAll(await agent.getCodeQualityInsights(''));
+      //
     }
 
     if (shouldProvideProjectStructureInsights) {
-      insights.addAll(await agent.getCodeQualityInsights(''));
+      //
     }
 
     if (shouldProvidePerformanceInsights) {
-      insights.addAll(await agent.getCodeQualityInsights(''));
+      //
     }
 
     if (shouldProvideTestabilityInsights) {
-      insights.addAll(await agent.getCodeQualityInsights(''));
+      //
     }
 
     final output = InsightsOutput.formatInsights(insights);
