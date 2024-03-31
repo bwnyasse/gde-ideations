@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:ansicolor/ansicolor.dart';
 import 'package:args/command_runner.dart';
 import 'package:comet/features/explore/explore_command.dart';
 import 'package:comet/features/insights/insights_command.dart';
@@ -26,7 +27,10 @@ Future<void> main(List<String> arguments) async {
   try {
     await runner.run(arguments);
   } catch (error) {
-    print('Error: $error');
+    final pen = AnsiPen()..red(bold: true);
+    print("${pen('Error while running Comet:')}\n");
+    print('$error');
+    print("\n${pen('Overview:')}\n");
     runner.printUsage();
   }
 }

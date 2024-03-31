@@ -101,18 +101,45 @@ class ExploreService {
     }
   }
 
-  Future<String> readLibContents() async {
+  Future<String> readProjectContents({
+    bool readLib = false,
+    bool readBin = false,
+    bool readPubspec = false,
+    bool readReadme = false,
+  }) async {
     final projectDir = Directory.current;
     final libDir = Directory(path.join(projectDir.path, 'lib'));
+    final binDir = Directory(path.join(projectDir.path, 'bin'));
+    final pubspecFile = File(path.join(projectDir.path, 'pubspec.yaml'));
+    final readmeFile = File(path.join(projectDir.path, 'README.md'));
 
     // Check if the project has a pubspec.yaml file
-    final pubspecFile = File(path.join(projectDir.path, 'pubspec.yaml'));
     if (!await pubspecFile.exists()) {
       return 'This does not appear to be a Dart or Flutter project.';
     }
 
     final sb = StringBuffer();
-    await _readDirectory(libDir, sb, projectDir.path);
+
+    if (readLib) {
+      await _readDirectory(libDir, sb, projectDir.path);
+    }
+
+    if (readBin) {
+      await _readDirectory(binDir, sb, projectDir.path);
+    }
+
+    if (readPubspec) {
+      sb.writeln('---------------- Below the contents of pubspec.yaml :');
+      sb.writeln(await pubspecFile.readAsString());
+      sb.writeln();
+    }
+
+    if (readReadme && await readmeFile.exists()) {
+      sb.writeln('---------------- Below the contents of README.md :');
+      sb.writeln(await readmeFile.readAsString());
+      sb.writeln();
+    }
+
     return sb.toString();
   }
 
@@ -123,7 +150,7 @@ class ExploreService {
         await _readDirectory(entity, sb, projectDir);
       } else if (entity is File && entity.path.endsWith('.dart')) {
         final relativePath = path.relative(entity.path, from: projectDir);
-        sb.writeln('File: $relativePath');
+        sb.writeln('---------------- Below the contents of the file $relativePath :');
         sb.writeln(await entity.readAsString());
         sb.writeln();
       }

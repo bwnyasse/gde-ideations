@@ -1,14 +1,14 @@
-import 'package:comet/features/explore/explore_service.dart';
 import 'package:comet/features/insights/insights_service.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:dotenv/dotenv.dart';
 
 class GeminiAgent extends InsightsService {
-  final folderService = ExploreService();
 
   @override
   Future<String> getCodeQualityInsightsPrompt() async {
-    final content = await folderService.readLibContents();
+    final content = await folderService.readProjectContents(
+      readLib: true,
+    );
 
     String output = '''
 As an experienced Dart developer, please review the provided code and provide specific recommendations to improve the code quality. Focus on the following files:
@@ -40,6 +40,51 @@ Please provide specific, actionable recommendations for each of these areas, ref
   "output: Top 2 recommendations for improving the code organization and structure:\n\n1. Separate Concerns by Domain:\n   - The current structure groups files by their type (screens, widgets, services, models), which is a common approach.\n   - However, consider organizing the files further by their domain or functionality, rather than just by their type.\n   - For example, you could have separate folders for \"authentication-related\" files, \"post-related\" files, and \"settings-related\" files.\n   - This will make the codebase more intuitive and easier to navigate, as the files will be grouped by their purpose rather than just their type.\n\n2. Utilize Consistent Naming Conventions:\n   - Ensure that you are using consistent naming conventions for your files, classes, and variables throughout the project.\n   - Follow the Dart style guide and use descriptive, meaningful names that reflect the purpose of the code elements.\n   - This will improve the readability and maintainability of the codebase, making it easier for other developers to understand and work with the code.\n\nSuggested Project Structure:\n\n└── my_app\n    ├── assets\n    ├── lib\n    │   ├── authentication\n    │   │   ├── models\n    │   │   │   └── user_model.dart\n    │   │   ├── screens\n    │   │   │   ├── login_screen.dart\n    │   │   │   └── register_screen.dart\n    │   │   └── services\n    │   │       └── auth_service.dart\n    │   ├── posts\n    │   │   ├── models\n    │   │   │   └── post_model.dart\n    │   │   ├── screens\n    │   │   │   ├── home_screen.dart\n    │   │   │   └── post_detail_screen.dart\n    │   │   └── services\n    │   │       └── api_service.dart\n    │   ├── settings\n    │   │   ├── models\n    │   │   │   └── settings_model.dart\n    │   │   └── screens\n    │   │       └── settings_screen.dart\n    │   ├── shared\n    │   │   ├── services\n    │   │   │   └── storage_service.dart\n    │   │   └── widgets\n    │   │       ├── app_drawer.dart\n    │   │       ├── footer_widget.dart\n    │   │       └── header_widget.dart\n    │   └── main.dart\n    ├── test\n    ├── README.md\n    └── pubspec.yaml",
   "input: Provide the top 2 recommendations for improving the code organization and structure based on the following project layout:\n\n$folderTreeAsString\n\nSome interesting resources that could provide inspiration for improving the code organization and structure:\n- https://dart.dev/tools/pub/package-layout\n- https://dart.dev/effective-dart/style\n- https://codewithandrea.com/articles/flutter-project-structure/\n- https://medium.com/flutter-community/scalable-folder-structure-for-flutter-applications-183746bdc320",
   "output: ",
+''';
+  }
+
+  @override
+  Future<String> getProjectOverviewInsightsPrompt() async {
+    final content = await folderService.readProjectContents(
+      readLib: true,
+      readBin: true,
+      readPubspec: true,
+      readReadme: true,
+    );
+
+    return '''
+As a new developer joining this project, I would like to get a high-level overview of the project to help me understand its purpose, features, and implementation. Please provide the following information:
+
+Project Description:
+Provide a brief description of the project, including its purpose and the problem it aims to solve.
+
+Key Features:
+List the main features and functionalities provided by the project.
+
+Project Structure:
+Describe the overall structure of the project, including the major components, their responsibilities, and how they interact with each other. This can include:
+- Modules or packages
+- Core services or repositories
+- User interface components (e.g., screens, widgets)
+- Data models
+- Any other significant architectural elements
+
+Implementation Details:
+Provide a general overview of the implementation details, such as:
+- Programming languages and frameworks used
+- Architectural patterns or design principles applied
+- Notable libraries or third-party dependencies
+- Approach to handling data, networking, or other cross-cutting concerns
+
+Getting Started:
+Suggest any steps or resources that would be helpful for a new developer to get started with the project, such as setting up the development environment, running the project, or accessing relevant documentation.
+
+Please provide this information in a clear and concise manner, as if you were onboarding a new developer to the project. Feel free to use your own knowledge and understanding of the provided code files to fill in the details.
+
+To help me better understand the project, please also provide the full content of the implementation, including the following files:
+
+$content
+
 ''';
   }
 

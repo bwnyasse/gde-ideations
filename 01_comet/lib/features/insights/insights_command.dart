@@ -1,5 +1,7 @@
+import 'package:ansicolor/ansicolor.dart';
 import 'package:args/command_runner.dart';
 import 'package:comet/features/insights/agents/gemini_agent.dart';
+import 'package:comet/features/insights/insights_exception.dart';
 import 'package:comet/features/insights/insights_model.dart';
 import 'package:comet/features/insights/insights_service.dart';
 
@@ -13,14 +15,8 @@ class InsightsCommand extends Command<void> {
       'Provide recommendations for better code organization and structure.';
   static String codeQuality =
       'Identify potential code quality issues and provide suggestions.';
-  static String dependencies =
-      'Analyze project dependencies and provide insights.';
-  static String projectStructure =
-      'Analyze the project structure and provide recommendations.';
-  static String performance =
-      'Identify performance bottlenecks and provide optimization suggestions.';
-  static String testability =
-      "Assess the project's testability and provide coverage insights.";
+  static String projectOverview =
+      'Analyze the project and provide an overview.';
 
   InsightsCommand() {
     argParser
@@ -43,106 +39,55 @@ class InsightsCommand extends Command<void> {
         help: codeQuality,
       )
       ..addFlag(
-        'dependencies',
-        negatable: false,
-        abbr: 'd',
-        help: dependencies,
-      )
-      ..addFlag(
-        'project-structure',
+        'project-overview',
         negatable: false,
         abbr: 'p',
-        help: projectStructure,
-      )
-      ..addFlag(
-        'performance',
-        negatable: false,
-        abbr: 'r',
-        help: performance,
-      )
-      ..addFlag(
-        'testability',
-        negatable: false,
-        abbr: 't',
-        help: testability,
+        help: projectOverview,
       );
   }
   @override
   void run() async {
-    final aiModel = argResults?['model'] as String? ?? 'gemini';
-    bool shouldProvideCodeOrganizationInsights = false;
-    bool shouldProvideCodeQualityInsights = false;
-    bool shouldProvideDependencyInsights = false;
-    bool shouldProvideProjectStructureInsights = false;
-    bool shouldProvidePerformanceInsights = false;
-    bool shouldProvideTestabilityInsights = false;
+    try {
+      final aiModel = argResults?['model'] as String? ?? 'gemini';
+      final selectedInsightTypes = <InsightType>[];
+      if (argResults?['code-organization'] as bool? ?? false) {
+        selectedInsightTypes.add(InsightType.codeOrganization);
+      }
+      if (argResults?['code-quality'] as bool? ?? false) {
+        selectedInsightTypes.add(InsightType.codeQuality);
+      }
+      if (argResults?['project-overview'] as bool? ?? false) {
+        selectedInsightTypes.add(InsightType.projectOverview);
+      }
 
-    int selectedFlagCount = 0;
+      if (selectedInsightTypes.length != 1) {
+        throw ArgumentError('Only one of the insights flags can be set.');
+      }
 
-    if (argResults?['code-organization'] as bool? ?? false) {
-      shouldProvideCodeOrganizationInsights = true;
-      selectedFlagCount++;
-    }
-    if (argResults?['code-quality'] as bool? ?? false) {
-      shouldProvideCodeQualityInsights = true;
-      selectedFlagCount++;
-    }
-    if (argResults?['dependencies'] as bool? ?? false) {
-      shouldProvideDependencyInsights = true;
-      selectedFlagCount++;
-    }
-    if (argResults?['project-structure'] as bool? ?? false) {
-      shouldProvideProjectStructureInsights = true;
-      selectedFlagCount++;
-    }
-    if (argResults?['performance'] as bool? ?? false) {
-      shouldProvidePerformanceInsights = true;
-      selectedFlagCount++;
-    }
-    if (argResults?['testability'] as bool? ?? false) {
-      shouldProvideTestabilityInsights = true;
-      selectedFlagCount++;
-    }
+      final insights = <Insights>[];
+      final InsightsService agent;
+      switch (aiModel) {
+        case 'gemini':
+          agent = GeminiAgent();
+          break;
+        default:
+          throw ArgumentError('Invalid AI model: $aiModel');
+      }
 
-    if (selectedFlagCount != 1) {
-      throw ArgumentError('Only one of the insights flags can be set.');
-    }
+      for (final insightType in selectedInsightTypes) {
+        insights.addAll(await agent.getInsights(insightType));
+      }
 
-    final insights = <Insights>[];
-    final InsightsService agent;
-    switch (aiModel) {
-      case 'gemini':
-        agent = GeminiAgent();
-        break;
-      default:
-        throw ArgumentError('Invalid AI model: $aiModel');
+      final output = InsightsOutput.formatInsights(insights);
+      print(output);
+    } catch (error, stackTrace) {
+      if (error is InsightsException) {
+        final pen = AnsiPen()..red(bold: true);
+        print("${pen('Error while generating insights:')}\n");
+        print(error.message);
+        print("${pen('Stack Trace:')}\n$stackTrace");
+        print("${pen('Origin:')}\n${error.origin}:\n${error.origin.message}\n${error.stackTrace}");
+      }
     }
-
-    if (shouldProvideCodeOrganizationInsights) {
-      insights.addAll(await agent.getCodeOrganizationInsights());
-    }
-
-    if (shouldProvideCodeQualityInsights) {
-      insights.addAll(await agent.getCodeQualityInsights());
-    }
-
-    if (shouldProvideDependencyInsights) {
-      //
-    }
-
-    if (shouldProvideProjectStructureInsights) {
-      //
-    }
-
-    if (shouldProvidePerformanceInsights) {
-      //
-    }
-
-    if (shouldProvideTestabilityInsights) {
-      //
-    }
-
-    final output = InsightsOutput.formatInsights(insights);
-    print(output);
   }
 }

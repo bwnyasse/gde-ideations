@@ -39,10 +39,10 @@ class ExploreCommand extends Command<void> {
         help: 'Print the date of last modification.',
       )
       ..addFlag(
-        'read-lib',
+        'read-impl',
         negatable: false,
         hide: true,
-        help: 'Read the lib content of Dart/Flutter project.',
+        help: 'Read the implementation of Dart/Flutter project.',
       );
   }
 
@@ -53,13 +53,17 @@ class ExploreCommand extends Command<void> {
     final dirOnly = argResults?['directories'];
     final showSize = argResults?['size'];
     final showDate = argResults?['date'];
-    final readLib = argResults?['read-lib'];
+    final readImpl = argResults?['read-impl'];
 
     final folderService = ExploreService();
 
-    if (readLib) {
-      final output = await folderService.readLibContents();
-
+    if (readImpl) {
+      final output = await folderService.readProjectContents(
+        readLib: true,
+        readBin: true,
+        readPubspec: true,
+        readReadme: true,
+      );
       print(output);
     } else {
       final folderTree = await folderService.exploreFileSystem(

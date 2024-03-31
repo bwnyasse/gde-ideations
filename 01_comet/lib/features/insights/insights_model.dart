@@ -1,5 +1,11 @@
 import 'package:ansicolor/ansicolor.dart';
 
+enum InsightType {
+  projectOverview,
+  codeOrganization,
+  codeQuality,
+}
+
 class Insights {
   final String title;
   final String description;
@@ -29,7 +35,7 @@ class InsightsOutput {
     final sb = StringBuffer();
     for (int i = 0; i < insights.length; i++) {
       final insight = insights[i];
-      sb.writeln("== Request : ${insight.toString()}");
+      sb.writeln("## Request : ${insight.toString()}");
     }
     return sb.toString();
   }
