@@ -1,6 +1,7 @@
 import 'package:args/command_runner.dart';
 import 'package:comet/features/insights/agents/gemini_agent.dart';
 import 'package:comet/features/insights/insights_model.dart';
+import 'package:comet/features/insights/insights_service.dart';
 
 class InsightsCommand extends Command<void> {
   @override
@@ -82,30 +83,8 @@ class InsightsCommand extends Command<void> {
     final shouldProvideTestabilityInsights =
         argResults?['testability'] as bool? ?? false;
 
-    final insights = await _generateInsights(
-      aiModel,
-      shouldProvideCodeOrganizationInsights,
-      shouldProvideCodeQualityInsights,
-      shouldProvideDependencyInsights,
-      shouldProvideProjectStructureInsights,
-      shouldProvidePerformanceInsights,
-      shouldProvideTestabilityInsights,
-    );
-
-    print(insights);
-  }
-
-  Future<List<Insights>> _generateInsights(
-    String aiModel,
-    bool shouldProvideCodeOrganizationInsights,
-    bool shouldProvideCodeQualityInsights,
-    bool shouldProvideDependencyInsights,
-    bool shouldProvideProjectStructureInsights,
-    bool shouldProvidePerformanceInsights,
-    bool shouldProvideTestabilityInsights,
-  ) async {
     final insights = <Insights>[];
-    final agent;
+    final InsightsService agent;
     switch (aiModel) {
       case 'gemini':
         agent = GeminiAgent();
@@ -115,15 +94,30 @@ class InsightsCommand extends Command<void> {
     }
 
     if (shouldProvideCodeOrganizationInsights) {
-      insights.addAll(await agent.getCodeOrganizationInsights(''));
+      insights.addAll(await agent.getCodeOrganizationInsights());
     }
 
     if (shouldProvideCodeQualityInsights) {
       insights.addAll(await agent.getCodeQualityInsights(''));
     }
 
-    // Add other insight generation logic here
+    if (shouldProvideDependencyInsights) {
+      insights.addAll(await agent.getCodeQualityInsights(''));
+    }
 
-    return insights;
+    if (shouldProvideProjectStructureInsights) {
+      insights.addAll(await agent.getCodeQualityInsights(''));
+    }
+
+    if (shouldProvidePerformanceInsights) {
+      insights.addAll(await agent.getCodeQualityInsights(''));
+    }
+
+    if (shouldProvideTestabilityInsights) {
+      insights.addAll(await agent.getCodeQualityInsights(''));
+    }
+
+    final output = InsightsOutput.formatInsights(insights);
+    print(output);
   }
 }

@@ -1,3 +1,5 @@
+import 'package:ansicolor/ansicolor.dart';
+
 class Insights {
   final String title;
   final String description;
@@ -9,9 +11,26 @@ class Insights {
 
   @override
   String toString() {
+    final pen = AnsiPen()..green(bold: true);
     return '''
-$title
+${pen(title)}
+
 $description
 ''';
+  }
+}
+
+class InsightsOutput {
+  static String formatInsights(List<Insights> insights) {
+    if (insights.isEmpty) {
+      return "Nothing to display";
+    }
+
+    final sb = StringBuffer();
+    for (int i = 0; i < insights.length; i++) {
+      final insight = insights[i];
+      sb.writeln("== Request : ${insight.toString()}");
+    }
+    return sb.toString();
   }
 }
