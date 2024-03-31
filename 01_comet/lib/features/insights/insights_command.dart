@@ -1,12 +1,25 @@
 import 'package:args/command_runner.dart';
-import 'package:comet/features/insights/insights_service.dart';
-import 'package:comet/features/explore/explore_service.dart';
+import 'package:comet/features/insights/agents/gemini_agent.dart';
+import 'package:comet/features/insights/insights_model.dart';
 
 class InsightsCommand extends Command<void> {
   @override
   final name = 'insights';
   @override
   final description = 'Provide AI-powered insights.';
+
+  static String codeOrganization =
+      'Provide recommendations for better code organization and structure.';
+  static String codeQuality =
+      'Identify potential code quality issues and provide suggestions.';
+  static String dependencies =
+      'Analyze project dependencies and provide insights.';
+  static String projectStructure =
+      'Analyze the project structure and provide recommendations.';
+  static String performance =
+      'Identify performance bottlenecks and provide optimization suggestions.';
+  static String testability =
+      "Assess the project's testability and provide coverage insights.";
 
   InsightsCommand() {
     argParser
@@ -20,68 +33,97 @@ class InsightsCommand extends Command<void> {
         'code-organization',
         negatable: false,
         abbr: 'o',
-        help:
-            'Provide recommendations for better code organization and structure.',
+        help: codeOrganization,
       )
       ..addFlag(
         'code-quality',
         negatable: false,
         abbr: 'q',
-        help: 'Identify potential code quality issues and provide suggestions.',
+        help: codeQuality,
       )
       ..addFlag(
         'dependencies',
         negatable: false,
         abbr: 'd',
-        help: 'Analyze project dependencies and provide insights.',
+        help: dependencies,
       )
       ..addFlag(
         'project-structure',
         negatable: false,
         abbr: 'p',
-        help: 'Analyze the project structure and provide recommendations.',
+        help: projectStructure,
       )
       ..addFlag(
         'performance',
         negatable: false,
         abbr: 'r',
-        help:
-            'Identify performance bottlenecks and provide optimization suggestions.',
+        help: performance,
       )
       ..addFlag(
         'testability',
         negatable: false,
         abbr: 't',
-        help: "Assess the project's testability and provide coverage insights.",
+        help: testability,
       );
   }
-
   @override
   void run() async {
     final aiModel = argResults?['model'] as String? ?? 'gemini';
     final shouldProvideCodeOrganizationInsights =
-        argResults?['code-organization'];
-    final shouldProvideCodeQualityInsights = argResults?['code-quality'];
-    final shouldProvideDependencyInsights = argResults?['dependencies'];
+        argResults?['code-organization'] as bool? ?? false;
+    final shouldProvideCodeQualityInsights =
+        argResults?['code-quality'] as bool? ?? false;
+    final shouldProvideDependencyInsights =
+        argResults?['dependencies'] as bool? ?? false;
     final shouldProvideProjectStructureInsights =
-        argResults?['project-structure'];
-    final shouldProvidePerformanceInsights = argResults?['performance'];
-    final shouldProvideTestabilityInsights = argResults?['testability'];
+        argResults?['project-structure'] as bool? ?? false;
+    final shouldProvidePerformanceInsights =
+        argResults?['performance'] as bool? ?? false;
+    final shouldProvideTestabilityInsights =
+        argResults?['testability'] as bool? ?? false;
 
-
-    final aiService = AIService(aiModel);
-    final insights = await aiService.generateInsights(
-      
-      shouldProvideCodeOrganizationInsights:
-          shouldProvideCodeOrganizationInsights,
-      shouldProvideCodeQualityInsights: shouldProvideCodeQualityInsights,
-      shouldProvideDependencyInsights: shouldProvideDependencyInsights,
-      shouldProvideProjectStructureInsights:
-          shouldProvideProjectStructureInsights,
-      shouldProvidePerformanceInsights: shouldProvidePerformanceInsights,
-      shouldProvideTestabilityInsights: shouldProvideTestabilityInsights,
+    final insights = await _generateInsights(
+      aiModel,
+      shouldProvideCodeOrganizationInsights,
+      shouldProvideCodeQualityInsights,
+      shouldProvideDependencyInsights,
+      shouldProvideProjectStructureInsights,
+      shouldProvidePerformanceInsights,
+      shouldProvideTestabilityInsights,
     );
 
     print(insights);
+  }
+
+  Future<List<Insights>> _generateInsights(
+    String aiModel,
+    bool shouldProvideCodeOrganizationInsights,
+    bool shouldProvideCodeQualityInsights,
+    bool shouldProvideDependencyInsights,
+    bool shouldProvideProjectStructureInsights,
+    bool shouldProvidePerformanceInsights,
+    bool shouldProvideTestabilityInsights,
+  ) async {
+    final insights = <Insights>[];
+    final agent;
+    switch (aiModel) {
+      case 'gemini':
+        agent = GeminiAgent();
+        break;
+      default:
+        throw ArgumentError('Invalid AI model: $aiModel');
+    }
+
+    if (shouldProvideCodeOrganizationInsights) {
+      insights.addAll(await agent.getCodeOrganizationInsights(''));
+    }
+
+    if (shouldProvideCodeQualityInsights) {
+      insights.addAll(await agent.getCodeQualityInsights(''));
+    }
+
+    // Add other insight generation logic here
+
+    return insights;
   }
 }
