@@ -90,6 +90,13 @@ To generate an updated version of your project's README.md file, run:
 
     comet insights --update-readme
 
+## Demo
+
+
+
+https://github.com/bwnyasse/gde-ideations/assets/5323628/26b34350-da25-4d73-ae10-1a39bfda945d
+
+
     
 ## Roadmap
 
