@@ -30,6 +30,8 @@ abstract class InsightsService {
         return await getCodeOrganizationInsightsPrompt();
       case InsightType.codeQuality:
         return await getCodeQualityInsightsPrompt();
+      case InsightType.updateReadme:
+        return await getUpdateReadmeInsightsPrompt();
     }
   }
 
@@ -41,9 +43,12 @@ abstract class InsightsService {
         return InsightsCommand.codeOrganization;
       case InsightType.codeQuality:
         return InsightsCommand.codeQuality;
+      case InsightType.updateReadme:
+        return InsightsCommand.updateReadme;
     }
   }
 
+  Future<String> getUpdateReadmeInsightsPrompt();
   Future<String> getProjectOverviewInsightsPrompt();
   Future<String> getCodeOrganizationInsightsPrompt();
   Future<String> getCodeQualityInsightsPrompt();

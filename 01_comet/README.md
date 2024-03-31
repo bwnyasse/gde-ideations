@@ -1,25 +1,48 @@
 # Comet: An AI-Powered Folder Explorer
 
-Comet is a command-line tool that allows you to explore your file system with the help of AI-powered insights. It provides an enhanced experience over the standard `tree` command, offering features like file organization recommendations, large file identification, and more.
+Comet is a command-line tool that allows you to explore your file system and get AI-powered insights to help you better understand and organize your codebase.
 
 ## Features
 
-- Explore your file system with a tree-like structure
-- Filter files and folders by name (supports wildcards and regular expressions)
-- List directories only
-- Display file sizes and last modification dates
-- Integrate with AI models (e.g., Gemini) to provide intelligent insights
+- **Explore File System**: Comet's file system exploration capabilities were inspired by the popular `tree` command, but with added features tailored for Dart and Flutter developers. Comet provides an enhanced experience, allowing you to explore your project's file structure with a tree-like visualization, filter files and folders by name (including support for wildcards and regular expressions), and display useful information such as file sizes and last modification dates.
+
+- **AI-Powered Insights:** Comet integrates with state-of-the-art AI models, such as Gemini, to provide intelligent insights about your codebase. These insights can help you improve code organization, identify potential quality issues, and analyze the overall project structure.
+
+- **Customizable Insights:** Comet allows you to selectively generate insights on various aspects of your project, including code organization, code quality, and project overview.
+
+- **Update README:** Comet can provide an updated version of your project's README.md file, making it more informative and welcoming for new contributor
 
 ## Installation
 
-To install Comet, you'll need to have Dart installed on your system. You can then use the Dart package manager, `pub`, to install the Comet package:
+Since Comet is not yet published on pub.dev, you'll need to generate the executable binary directly from the source code. To do this, follow these steps:
 
-    pub global activate comet
+1. Make sure you have Dart installed on your system. You can download the latest version of Dart from the official website: https://dart.dev/get-dart
+
+2. Clone the Comet repository from GitHub:
+
+    git clone https://github.com/bwnyasse/gde-ideations.git
+
+3. Navigate to the `comet` directory in your terminal.
+
+    cd gde-ideations/01_comet
+
+4. Run the following command to generate the executable binary:
+
+    dart compile exe -o comet bin/main.dart
+
+5. (Optional) Add the comet executable to your system's PATH environment variable, so you can run it from anywhere in your terminal. The exact steps for this will depend on your operating system.
+
+
+As the Comet project progresses, we plan to publish it on pub.dev, which will make the installation process much simpler. But for now, this manual compilation step is necessary to use the tool.
 
 
 ## Usage
 
 To use Comet, simply run the `comet` command in your terminal. 
+
+### Exploring the File System
+
+To explore your file system using Comet, simply run the `comet explore` command in your terminal. You can customize the output by using various flags, such as `--directories`, `--size`, and `--date`.
 
 For example, to list only the directories in the current directory, you can run:
 
@@ -30,13 +53,29 @@ To list all files and folders that match the `*.dart` pattern, you can run:
 
     comet explore --pattern '*.dart'
 
+### Generating AI-Powered Insights
 
+To generate insights about your codebase, use the `comet insights` command. You can select the specific type of insights you want to generate, such as code organization, code quality, project overview, or an updated README.
+
+For example, to generate insights about the code organization and structure of your project, you can run:
+
+    comet insights --code-organization
+
+To get an overview of your project, run:
+
+    comet insights --project-overview
+
+To generate an updated version of your project's README.md file, run:
+
+    comet insights --update-readme
+
+    
 ## Roadmap
 
-- Integrate with additional AI models (e.g., OpenAI, Claude) to provide more advanced insights
-- Add support for interactive mode, where users can ask questions about the file system and receive AI-generated responses
-- Improve the output formatting and visualization
-- Provide more customization options for the user interface
+- **Expand AI Model Integration:** Provide users with the ability to select from a variety of AI models, including OpenAI, and Claude, to generate insights. This will allow users to choose the model that best suits their needs and preferences, and potentially unlock more advanced or specialized insights.
+
+
+- **Interactive Mode::** Add support for an interactive mode, where users can ask questions about the file system and receive AI-generated responses. This will enable users to explore and understand their codebase more intuitively, without having to rely solely on the command-line interface.
 
 ## Contributing
 

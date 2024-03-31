@@ -3,6 +3,57 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:dotenv/dotenv.dart';
 
 class GeminiAgent extends InsightsService {
+  @override
+  Future<String> generateInsight(String prompt) async {
+    var env = DotEnv(includePlatformEnvironment: true)..load();
+
+    final apiKey = env['GENERATIVE_AI_API_KEY']!;
+
+    final content = [Content.text(prompt)];
+
+    final model = GenerativeModel(
+      model: 'models/gemini-pro',
+      //model: 'models/gemini-1.5-pro-latest',
+      apiKey: apiKey,
+      safetySettings: [
+        SafetySetting(
+          HarmCategory.sexuallyExplicit,
+          HarmBlockThreshold.medium,
+        ),
+        SafetySetting(
+          HarmCategory.hateSpeech,
+          HarmBlockThreshold.medium,
+        ),
+        SafetySetting(
+          HarmCategory.harassment,
+          HarmBlockThreshold.medium,
+        ),
+        SafetySetting(
+          HarmCategory.dangerousContent,
+          HarmBlockThreshold.medium,
+        ),
+      ],
+      generationConfig: GenerationConfig(
+        // optional, 0.0 always uses the highest-probability result
+        temperature: 0.7,
+        // optional, how many candidate results to generate
+        candidateCount: 1,
+        // optional, number of most probable tokens to consider for generation
+        topK: 40,
+        // optional, for nucleus sampling decoding strategy
+        topP: 0.95,
+        // optional, maximum number of output tokens to generate
+        maxOutputTokens: 1024,
+        // optional, sequences at which to stop model generation
+        stopSequences: [],
+      ),
+    );
+
+    // Call the  API to generate text
+    final GenerateContentResponse response =
+        await model.generateContent(content);
+    return response.text ?? '';
+  }
 
   @override
   Future<String> getCodeQualityInsightsPrompt() async {
@@ -89,54 +140,32 @@ $content
   }
 
   @override
-  Future<String> generateInsight(String prompt) async {
-    var env = DotEnv(includePlatformEnvironment: true)..load();
-
-    final apiKey = env['GENERATIVE_AI_API_KEY']!;
-
-    final content = [Content.text(prompt)];
-
-    final model = GenerativeModel(
-      model: 'models/gemini-pro',
-      //model: 'models/gemini-1.5-pro-latest',
-      apiKey: apiKey,
-      safetySettings: [
-        SafetySetting(
-          HarmCategory.sexuallyExplicit,
-          HarmBlockThreshold.medium,
-        ),
-        SafetySetting(
-          HarmCategory.hateSpeech,
-          HarmBlockThreshold.medium,
-        ),
-        SafetySetting(
-          HarmCategory.harassment,
-          HarmBlockThreshold.medium,
-        ),
-        SafetySetting(
-          HarmCategory.dangerousContent,
-          HarmBlockThreshold.medium,
-        ),
-      ],
-      generationConfig: GenerationConfig(
-        // optional, 0.0 always uses the highest-probability result
-        temperature: 0.7,
-        // optional, how many candidate results to generate
-        candidateCount: 1,
-        // optional, number of most probable tokens to consider for generation
-        topK: 40,
-        // optional, for nucleus sampling decoding strategy
-        topP: 0.95,
-        // optional, maximum number of output tokens to generate
-        maxOutputTokens: 1024,
-        // optional, sequences at which to stop model generation
-        stopSequences: [],
-      ),
+  Future<String> getUpdateReadmeInsightsPrompt() async {
+    // Read the current project contents
+    final libContents = await folderService.readProjectContents(
+      readLib: true,
+      readBin: true,
+      readPubspec: true,
+      readReadme: true,
     );
 
-    // Call the  API to generate text
-    final GenerateContentResponse response =
-        await model.generateContent(content);
-    return response.text ?? '';
+    // Construct the prompt
+    String prompt = '''
+Given the current project structure and implementation details provided below, please generate an updated version of the README.md file for the project. The updated README.md should be informative and welcoming, providing all the necessary details for new contributors to understand the project's purpose, key features, and how to get started with development.
+
+Current Project Contents:
+$libContents
+
+The updated README.md should include:
+- A brief introduction to the project that clearly explains its purpose and the problem it aims to solve.
+- A detailed list of key features and functionalities of the project.
+- An overview of the project structure, highlighting major components and their responsibilities.
+- A section on implementation details that might be helpful for new developers, including programming languages, frameworks used, and any notable architectural patterns or design principles.
+- A 'Getting Started' section that guides new developers through setting up the development environment, running the project, and accessing relevant documentation.
+
+Please structure your response as the content of the README.md file, ready to be added to the project repository.
+''';
+
+    return prompt;
   }
 }

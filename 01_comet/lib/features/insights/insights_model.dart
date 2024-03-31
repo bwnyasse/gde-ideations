@@ -4,6 +4,7 @@ enum InsightType {
   projectOverview,
   codeOrganization,
   codeQuality,
+  updateReadme,
 }
 
 class Insights {

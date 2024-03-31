@@ -17,6 +17,8 @@ class InsightsCommand extends Command<void> {
       'Identify potential code quality issues and provide suggestions.';
   static String projectOverview =
       'Analyze the project and provide an overview.';
+  static String updateReadme =
+      'Provide an update version of the project README.';
 
   InsightsCommand() {
     argParser
@@ -43,8 +45,15 @@ class InsightsCommand extends Command<void> {
         negatable: false,
         abbr: 'p',
         help: projectOverview,
+      )
+      ..addFlag(
+        'update-readme',
+        negatable: false,
+        abbr: 'r',
+        help: updateReadme,
       );
   }
+  
   @override
   void run() async {
     try {
@@ -57,6 +66,9 @@ class InsightsCommand extends Command<void> {
         selectedInsightTypes.add(InsightType.codeQuality);
       }
       if (argResults?['project-overview'] as bool? ?? false) {
+        selectedInsightTypes.add(InsightType.projectOverview);
+      }
+      if (argResults?['update-readme'] as bool? ?? false) {
         selectedInsightTypes.add(InsightType.projectOverview);
       }
 
@@ -86,7 +98,8 @@ class InsightsCommand extends Command<void> {
         print("${pen('Error while generating insights:')}\n");
         print(error.message);
         print("${pen('Stack Trace:')}\n$stackTrace");
-        print("${pen('Origin:')}\n${error.origin}:\n${error.origin.message}\n${error.stackTrace}");
+        print(
+            "${pen('Origin:')}\n${error.origin}:\n${error.origin.message}\n${error.stackTrace}");
       }
     }
   }

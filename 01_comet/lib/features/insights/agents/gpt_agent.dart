@@ -20,4 +20,9 @@ class GPTAgent extends InsightsService {
   Future<String> getProjectOverviewInsightsPrompt() {
     throw UnimplementedError("Not implemented yet");
   }
+
+  @override
+  Future<String> getUpdateReadmeInsightsPrompt() {
+    throw UnimplementedError("Not implemented yet");
+  }
 }
