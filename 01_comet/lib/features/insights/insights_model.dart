@@ -27,15 +27,14 @@ $description
   }
 }
 
-class InsightsOutput {
-  static String formatInsights(List<Insights> insights) {
-    if (insights.isEmpty) {
+extension InsightsExtension on List<Insights> {
+  String format() {
+    if (isEmpty) {
       return "Nothing to display";
     }
 
     final sb = StringBuffer();
-    for (int i = 0; i < insights.length; i++) {
-      final insight = insights[i];
+    for (final insight in this) {
       sb.writeln("## Request : ${insight.toString()}");
     }
     return sb.toString();

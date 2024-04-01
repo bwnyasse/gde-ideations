@@ -20,10 +20,9 @@ class ClaudeAgent extends InsightsService {
   Future<String> getProjectOverviewInsightsPrompt() {
     throw UnimplementedError("Not implemented yet");
   }
-  
+
   @override
   Future<String> getUpdateReadmeInsightsPrompt() {
- throw UnimplementedError("Not implemented yet");
+    throw UnimplementedError("Not implemented yet");
   }
-
 }

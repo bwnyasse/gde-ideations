@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:comet/features/explore/explore_model.dart';
 import 'package:path/path.dart' as path;
 
@@ -146,13 +147,16 @@ class ExploreService {
   Future<void> _readDirectory(
       Directory directory, StringBuffer sb, String projectDir) async {
     for (final entity in await directory.list().toList()) {
-      if (entity is Directory) {
-        await _readDirectory(entity, sb, projectDir);
-      } else if (entity is File && entity.path.endsWith('.dart')) {
-        final relativePath = path.relative(entity.path, from: projectDir);
-        sb.writeln('---------------- Below the contents of the file $relativePath :');
-        sb.writeln(await entity.readAsString());
-        sb.writeln();
+      switch (entity) {
+        case final directory when directory is Directory:
+          await _readDirectory(directory, sb, projectDir);
+        case final file when file is File && file.parent.path.endsWith('.dart'):
+          final relativePath = path.relative(entity.path, from: projectDir);
+          sb.writeln(
+              '---------------- Below the contents of the file $relativePath :');
+          sb.writeln(await file.readAsString());
+          sb.writeln();
+          break;
       }
     }
   }
