@@ -53,7 +53,7 @@ class InsightsCommand extends Command<void> {
         help: updateReadme,
       );
   }
-  
+
   @override
   void run() async {
     try {
@@ -90,7 +90,7 @@ class InsightsCommand extends Command<void> {
         insights.addAll(await agent.getInsights(insightType));
       }
 
-      final output = InsightsOutput.formatInsights(insights);
+      final output = insights.format();
       print(output);
     } catch (error, stackTrace) {
       if (error is InsightsException) {
