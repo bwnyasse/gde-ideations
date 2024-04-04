@@ -12,7 +12,6 @@ class AuthUtils {
   static Future<auth.AutoRefreshingAuthClient> getAuthenticatedClient() async {
     // Prompt the user to authorize the application.
     var client = await auth.clientViaUserConsent(clientId, scopes, prompt);
-
     return client;
   }
 
