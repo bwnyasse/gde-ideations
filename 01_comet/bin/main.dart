@@ -3,13 +3,15 @@ import 'dart:io';
 import 'package:ansicolor/ansicolor.dart';
 import 'package:args/command_runner.dart';
 import 'package:comet/features/explore/explore_command.dart';
+import 'package:comet/features/form/form_command.dart';
 import 'package:comet/features/insights/insights_command.dart';
 
 Future<void> main(List<String> arguments) async {
   final runner =
       CommandRunner<void>('comet', 'The Comet : an AI-Powered Folder Explorer')
         ..addCommand(ExploreCommand())
-        ..addCommand(InsightsCommand());
+        ..addCommand(InsightsCommand())
+        ..addCommand(FormCommand());
 
   // Add the version option to the command runner.
   runner.argParser.addFlag(

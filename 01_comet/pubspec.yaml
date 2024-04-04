@@ -10,9 +10,12 @@ dependencies:
   args: ^2.4.2
   dotenv: ^4.2.0
   google_generative_ai: ^0.2.2
+  googleapis: ^13.1.0
+  googleapis_auth: ^1.5.1
+  http: ^1.2.1
   intl: ^0.19.0
   path: ^1.9.0
-
 dev_dependencies:
-  lints: ^2.0.0
-  test: ^1.16.0
+  lints: ^3.0.0
+
+
