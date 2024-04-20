@@ -1,59 +1,14 @@
 import 'package:comet/features/insights/insights_service.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:comet/utils/utils.dart';
 import 'package:dotenv/dotenv.dart';
 
 class GeminiAgent extends InsightsService {
   @override
-  Future<String> generateInsight(String prompt) async {
-    var env = DotEnv(includePlatformEnvironment: true)..load();
+  String getApiKey(DotEnv env) => env['GEMINI_AI_API_KEY']!;
 
-    final apiKey = env['GENERATIVE_AI_API_KEY']!;
-
-    final content = [Content.text(prompt)];
-
-    final model = GenerativeModel(
-      model: 'models/gemini-pro',
-      //model: 'models/gemini-1.5-pro-latest',
-      apiKey: apiKey,
-      safetySettings: [
-        SafetySetting(
-          HarmCategory.sexuallyExplicit,
-          HarmBlockThreshold.medium,
-        ),
-        SafetySetting(
-          HarmCategory.hateSpeech,
-          HarmBlockThreshold.medium,
-        ),
-        SafetySetting(
-          HarmCategory.harassment,
-          HarmBlockThreshold.medium,
-        ),
-        SafetySetting(
-          HarmCategory.dangerousContent,
-          HarmBlockThreshold.medium,
-        ),
-      ],
-      generationConfig: GenerationConfig(
-        // optional, 0.0 always uses the highest-probability result
-        temperature: 0.7,
-        // optional, how many candidate results to generate
-        candidateCount: 1,
-        // optional, number of most probable tokens to consider for generation
-        topK: 40,
-        // optional, for nucleus sampling decoding strategy
-        topP: 0.95,
-        // optional, maximum number of output tokens to generate
-        maxOutputTokens: 1024,
-        // optional, sequences at which to stop model generation
-        stopSequences: [],
-      ),
-    );
-
-    // Call the  API to generate text
-    final GenerateContentResponse response =
-        await model.generateContent(content);
-    return response.text ?? '';
-  }
+  @override
+  Future<String> generateInsight(String apiKey, String prompt) async =>
+      GeminiUtils.generateContent(apiKey, prompt);
 
   @override
   Future<String> getCodeQualityInsightsPrompt() async {

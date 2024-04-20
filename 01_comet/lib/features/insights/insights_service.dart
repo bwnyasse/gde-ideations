@@ -2,14 +2,18 @@ import 'package:comet/features/explore/explore_service.dart';
 import 'package:comet/features/insights/insights_command.dart';
 import 'package:comet/features/insights/insights_exception.dart';
 import 'package:comet/features/insights/insights_model.dart';
+import 'package:dotenv/dotenv.dart';
 
 abstract class InsightsService {
   final folderService = ExploreService();
 
   Future<List<Insights>> getInsights(InsightType insightType) async {
     try {
+      var env = DotEnv(includePlatformEnvironment: true)..load();
+
+      final apiKey = getApiKey(env);
       final prompt = await getInsightsPrompt(insightType);
-      final response = await generateInsight(prompt);
+      final response = await generateInsight(apiKey, prompt);
       return [
         Insights(
           title: _getInsightTitle(insightType),
@@ -48,9 +52,10 @@ abstract class InsightsService {
     }
   }
 
+  String getApiKey(DotEnv env);
   Future<String> getUpdateReadmeInsightsPrompt();
   Future<String> getProjectOverviewInsightsPrompt();
   Future<String> getCodeOrganizationInsightsPrompt();
   Future<String> getCodeQualityInsightsPrompt();
-  Future<String> generateInsight(String prompt);
+  Future<String> generateInsight(String apiKey, String prompt);
 }

@@ -1,4 +1,5 @@
 import 'package:args/command_runner.dart';
+import 'package:comet/features/form/form_service.dart';
 import 'package:comet/utils/utils.dart';
 import 'package:googleapis/forms/v1.dart' as forms;
 import 'package:http/http.dart' as http;
@@ -17,7 +18,7 @@ class FormCommand extends Command<void> {
   Future<void> run() async {
     // Obtain an authenticated client for interacting with DocumentAI.
     final client = await AuthUtils.getAuthenticatedClient();
-
+    final FormService service = FormService();
     try {
       var entry = argResults?['entry'];
       if (entry == null) {
@@ -25,7 +26,7 @@ class FormCommand extends Command<void> {
         return;
       }
 
-      var payload = generateFakePayload();
+      var payload = await service.generatePayload(entry);
       // Create or update the form using the Google Forms API
       await createOrUpdateForm(client, "", payload);
     } finally {
