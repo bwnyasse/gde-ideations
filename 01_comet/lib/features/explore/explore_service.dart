@@ -121,11 +121,11 @@ class ExploreService {
 
     final sb = StringBuffer();
 
-    if (readLib) {
+    if (readLib && await libDir.exists()) {
       await _readDirectory(libDir, sb, projectDir.path);
     }
 
-    if (readBin) {
+    if (readBin && await binDir.exists()) {
       await _readDirectory(binDir, sb, projectDir.path);
     }
 
