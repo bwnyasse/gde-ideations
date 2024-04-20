@@ -12,6 +12,8 @@ Comet is a command-line tool that allows you to explore your file system and get
 
 - **Update README:** Comet can provide an updated version of your project's README.md file, making it more informative and welcoming for new contributor
 
+- **Google Forms Integration**: Programmatically create and update Google Forms based on user input, streamlining data collection and automation tasks.
+
 ## Installation
 
 Since Comet is not yet published on pub.dev, you'll need to generate the executable binary directly from the source code. To do this, follow these steps:
@@ -49,13 +51,17 @@ To interact with the Gemini AI model, you will need to obtain an API key from Go
 
 ### Setting Up Your Environment
 
-To keep your API key secure and not hard-coded in your application, you should use environment variables. Here's how to set up your `.env` file:
+To use Comet's AI-powered features, you need to set up environment variables for API authentication. To keep your API key secure and not hard-coded in your application, you should use environment variables. Here's how to set up your `.env` file:
 
-1. In the root directory of your project, create a file named `.env`.
-2. Open the `.env` file in a text editor and add the following line:
+1. Create a `.env` file in the project root.
 
-    GENERATIVE_AI_API_KEY=<your API key>
+2. Add the following lines to your `.env` file:
 
+    GEMINI_AI_API_KEY=<your Gemini API key>
+    OAUTH_CLIENT_ID=<your OAuth client ID>
+    OAUTH_CLIENT_SECRET=<your OAuth client secret>
+
+3. Replace placeholders with your actual keys and credentials.
 
 ## Usage
 
@@ -89,6 +95,10 @@ To get an overview of your project, run:
 To generate an updated version of your project's README.md file, run:
 
     comet insights --update-readme
+
+### Interacting with Google Forms
+
+    comet form --prompt 'Please enter your details to register for the event.'
 
 ## Demo
 

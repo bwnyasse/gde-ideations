@@ -69,7 +69,7 @@ class InsightsCommand extends Command<void> {
         selectedInsightTypes.add(InsightType.projectOverview);
       }
       if (argResults?['update-readme'] as bool? ?? false) {
-        selectedInsightTypes.add(InsightType.projectOverview);
+        selectedInsightTypes.add(InsightType.updateReadme);
       }
 
       if (selectedInsightTypes.length != 1) {

@@ -11,7 +11,7 @@ class FormCommand extends Command<void> {
   final description = 'Interact with Google Forms.';
 
   FormCommand() {
-    argParser.addOption('entry', help: 'User entry to generate the form.');
+    argParser.addOption('prompt', help: 'User prompt to generate the form.');
   }
 
   @override
@@ -20,9 +20,9 @@ class FormCommand extends Command<void> {
     final client = await AuthUtils.getAuthenticatedClient();
     final FormService service = FormService();
     try {
-      var entry = argResults?['entry'];
+      var entry = argResults?['prompt'];
       if (entry == null) {
-        print('Please provide an entry.');
+        print('Please provide a prompt.');
         return;
       }
 
