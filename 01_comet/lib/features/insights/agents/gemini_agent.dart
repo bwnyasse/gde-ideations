@@ -123,4 +123,29 @@ Please structure your response as the content of the README.md file, ready to be
 
     return prompt;
   }
+
+  @override
+  Future<String> getFileManagementInsightsPrompt() async {
+    final folderTree = await folderService.exploreFileSystem();
+    final withMoreThan100Lines = folderTree.getFileNamesWithMoreThan100Lines();
+    String content = '';
+    for (var e in withMoreThan100Lines) {
+      content = '$content\n$e';
+    }
+
+    return '''
+Please provide suggestions on how to refactor the above Dart code to reduce its length to under 100 lines while maintaining or enhancing readability and functionality. 
+Focus on the following aspects:
+
+1. Modularization: Suggestions on breaking down the code into smaller, reusable functions or classes.
+2. Code Duplication: Identify and suggest ways to reduce any repetitive code patterns.
+3. Performance Optimization: Any changes that could potentially enhance the performance.
+4. Readability Improvements: Formatting or structural changes that could make the code easier to read and maintain.
+
+If no further optimizations are needed and the code is already well-optimized, please indicate. 
+The code content is provided below, with each section starting with the file name.
+
+$content
+''';
+  }
 }

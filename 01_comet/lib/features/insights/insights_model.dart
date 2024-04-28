@@ -5,6 +5,7 @@ enum InsightType {
   codeOrganization,
   codeQuality,
   updateReadme,
+  fileManagement,
 }
 
 class Insights {

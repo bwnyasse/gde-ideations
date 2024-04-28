@@ -10,17 +10,11 @@ class ExploreService {
     bool dirOnly = false,
     bool showSize = false,
     bool showDate = false,
+    bool showLines = false,
   }) async {
     final rootDir = Directory.current;
     return _exploreDirectory(
-      rootDir,
-      0,
-      level,
-      pattern,
-      dirOnly,
-      showSize,
-      showDate,
-    );
+        rootDir, 0, level, pattern, dirOnly, showSize, showDate, showLines);
   }
 
   Future<FolderModel> _exploreDirectory(
@@ -31,6 +25,7 @@ class ExploreService {
     bool dirOnly,
     bool showSize,
     bool showDate,
+    bool showLines,
   ) async {
     final subFolders = <FolderModel>[];
     final files = <FileModel>[];
@@ -51,6 +46,7 @@ class ExploreService {
                 dirOnly,
                 showSize,
                 showDate,
+                showLines,
               ),
             );
           } else {
@@ -68,14 +64,22 @@ class ExploreService {
           entity,
           pattern,
         )) {
+          final lines = await entity.readAsLines();
+          final content = lines.length > 100 ? await entity.readAsString() : "";
           final fileSize = showSize ? await entity.length() : 0;
-          files.add(FileModel(
-            name: path.basename(entity.path),
-            size: fileSize,
-            showSize: showSize,
-            showDate: showDate,
-            modifiedTime: entity.lastModifiedSync(),
-          ));
+
+          files.add(
+            FileModel(
+              name: path.basename(entity.path),
+              size: fileSize,
+              showSize: showSize,
+              showDate: showDate,
+              modifiedTime: entity.lastModifiedSync(),
+              showLines: showLines,
+              countLines: lines.length,
+              contentIf100Lines: content,
+            ),
+          );
         }
       }
     }

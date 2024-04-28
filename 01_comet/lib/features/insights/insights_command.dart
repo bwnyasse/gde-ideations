@@ -19,6 +19,7 @@ class InsightsCommand extends Command<void> {
       'Analyze the project and provide an overview.';
   static String updateReadme =
       'Provide an update version of the project README.';
+  static String fileManagement = 'Predictive File Management Suggestions.';
 
   InsightsCommand() {
     argParser
@@ -51,6 +52,12 @@ class InsightsCommand extends Command<void> {
         negatable: false,
         abbr: 'r',
         help: updateReadme,
+      )
+      ..addFlag(
+        'file-management',
+        negatable: false,
+        abbr: 'f',
+        help: fileManagement,
       );
   }
 
@@ -71,7 +78,9 @@ class InsightsCommand extends Command<void> {
       if (argResults?['update-readme'] as bool? ?? false) {
         selectedInsightTypes.add(InsightType.updateReadme);
       }
-
+      if (argResults?['file-management'] as bool? ?? false) {
+        selectedInsightTypes.add(InsightType.fileManagement);
+      }
       if (selectedInsightTypes.length != 1) {
         throw ArgumentError('Only one of the insights flags can be set.');
       }

@@ -36,6 +36,8 @@ abstract class InsightsService {
         return await getCodeQualityInsightsPrompt();
       case InsightType.updateReadme:
         return await getUpdateReadmeInsightsPrompt();
+      case InsightType.fileManagement:
+        return await getFileManagementInsightsPrompt();
     }
   }
 
@@ -49,6 +51,8 @@ abstract class InsightsService {
         return InsightsCommand.codeQuality;
       case InsightType.updateReadme:
         return InsightsCommand.updateReadme;
+      case InsightType.fileManagement:
+        return InsightsCommand.fileManagement;
     }
   }
 
@@ -57,5 +61,6 @@ abstract class InsightsService {
   Future<String> getProjectOverviewInsightsPrompt();
   Future<String> getCodeOrganizationInsightsPrompt();
   Future<String> getCodeQualityInsightsPrompt();
+  Future<String> getFileManagementInsightsPrompt();
   Future<String> generateInsight(String apiKey, String prompt);
 }

@@ -12,6 +12,20 @@ class FolderModel {
     required this.files,
   });
 
+  // Method to get names of files with more than 100 lines
+  List<String> getFileNamesWithMoreThan100Lines() {
+    List<String> fileNames = [];
+    for (var file in files) {
+      if (file.countLines > 100) {
+        fileNames.add('# File name: ${file.name}\n## File content below:\n```${file.contentIf100Lines}```\n');
+      }
+    }
+    for (var subFolder in subFolders) {
+      fileNames.addAll(subFolder.getFileNamesWithMoreThan100Lines());
+    }
+    return fileNames;
+  }
+
   @override
   String toString() {
     final sb = StringBuffer();
@@ -48,6 +62,9 @@ class FileModel {
   final bool showSize;
   final DateTime modifiedTime;
   final bool showDate;
+  final bool showLines;
+  final int countLines;
+  final String contentIf100Lines;
 
   FileModel({
     required this.name,
@@ -55,18 +72,27 @@ class FileModel {
     required this.showSize,
     required this.modifiedTime,
     required this.showDate,
+    required this.showLines,
+    required this.countLines,
+    required this.contentIf100Lines,
   });
 
   @override
   String toString() {
     final pen = AnsiPen()..blue();
     final modifiedTimePen = AnsiPen()..yellow();
+    final countLinesMagentaPen = AnsiPen()..magenta();
+    final countLinesGreenPen = AnsiPen()..green();
     final modifiedTimeString = showDate
         ? '(${modifiedTimePen(_getFormattedModifiedTime(modifiedTime))})'
         : '';
+    final lineCountControl = countLines > 100
+        ? countLinesMagentaPen(countLines)
+        : countLinesGreenPen(countLines);
+    final lineCountString = showLines ? ' |-> $lineCountControl' : '';
     return showSize
-        ? '[${pen(_getHumanReadableSize(size))}] $name $modifiedTimeString'
-        : '$name $modifiedTimeString';
+        ? '[${pen(_getHumanReadableSize(size))}] $name $modifiedTimeString $lineCountString'
+        : '$name$lineCountString $modifiedTimeString';
   }
 
   String _getHumanReadableSize(int bytes) {

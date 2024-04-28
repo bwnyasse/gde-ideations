@@ -39,6 +39,12 @@ class ExploreCommand extends Command<void> {
         help: 'Print the date of last modification.',
       )
       ..addFlag(
+        'count-lines',
+        negatable: false,
+        abbr: 'c',
+        help: 'Print the lines counts of each file.',
+      )
+      ..addFlag(
         'read-impl',
         negatable: false,
         hide: true,
@@ -53,6 +59,7 @@ class ExploreCommand extends Command<void> {
     final dirOnly = argResults?['directories'];
     final showSize = argResults?['size'];
     final showDate = argResults?['date'];
+    final showLines = argResults?['count-lines'];
     final readImpl = argResults?['read-impl'];
 
     final folderService = ExploreService();
@@ -72,6 +79,7 @@ class ExploreCommand extends Command<void> {
         dirOnly: dirOnly,
         showSize: showSize,
         showDate: showDate,
+        showLines: showLines,
       );
 
       print(folderTree);

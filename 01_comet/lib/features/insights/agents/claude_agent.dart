@@ -29,4 +29,9 @@ class ClaudeAgent extends InsightsService {
   Future<String> getUpdateReadmeInsightsPrompt() {
     throw UnimplementedError("Not implemented yet");
   }
+
+  @override
+  Future<String> getFileManagementInsightsPrompt() {
+    throw UnimplementedError("Not implemented yet");
+  }
 }
