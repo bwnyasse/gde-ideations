@@ -7,10 +7,10 @@ environment:
 
 dependencies:
   ansicolor: ^2.0.2
-  args: ^2.4.2
+  args: ^2.5.0
   cli_completion: ^0.5.0
   dotenv: ^4.2.0
-  google_generative_ai: ^0.2.2
+  google_generative_ai: ^0.3.2
   googleapis: ^13.1.0
   googleapis_auth: ^1.5.1
   http: ^1.2.1

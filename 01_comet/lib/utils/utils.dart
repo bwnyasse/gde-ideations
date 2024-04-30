@@ -8,8 +8,8 @@ class GeminiUtils {
     final content = [Content.text(prompt)];
 
     final model = GenerativeModel(
-      model: 'models/gemini-pro',
-      //model: 'models/gemini-1.5-pro-latest',
+      //model: 'models/gemini-pro',
+      model: 'models/gemini-1.5-pro-latest',
       apiKey: apiKey,
       safetySettings: [
         SafetySetting(
