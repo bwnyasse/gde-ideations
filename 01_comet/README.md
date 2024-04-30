@@ -1,14 +1,14 @@
 # Comet: An AI-Powered Folder Explorer
 
-Comet is a command-line tool that allows you to explore your file system and get AI-powered insights to help you better understand and organize your codebase.
+Comet is a command-line tool that allows you to explore your file system and get AI-powered insights to help you better understand and organize your codebase. With the integration of LLM like **Google's Gemini AI**, Comet transforms into an intelligent assistant for your development workflow.
 
 ## Features
 
-- **Explore File System**: Comet's file system exploration capabilities were inspired by the popular `tree` command, but with added features tailored for Dart and Flutter developers. Comet provides an enhanced experience, allowing you to explore your project's file structure with a tree-like visualization, filter files and folders by name (including support for wildcards and regular expressions), and display useful information such as file sizes and last modification dates.
+- **Explore File System**:  Inspired by the `tree` command, Comet adds features tailored for Dart and Flutter developers. Explore your project's file structure with a tree-like visualization, filter files and folders by name, and display file sizes, last modification dates, and line counts. 
 
 - **AI-Powered Insights:** Comet integrates with state-of-the-art AI models, such as Gemini, to provide intelligent insights about your codebase. These insights can help you improve code organization, identify potential quality issues, and analyze the overall project structure.
 
-- **Customizable Insights:** Comet allows you to selectively generate insights on various aspects of your project, including code organization, code quality, and project overview.
+- **Customizable Insights:** Selectively generate insights on various aspects of your project, including code organization, code quality, project overview, and predictive file management suggestions.
 
 - **Update README:** Comet can provide an updated version of your project's README.md file, making it more informative and welcoming for new contributor
 
@@ -28,11 +28,13 @@ Since Comet is not yet published on pub.dev, you'll need to generate the executa
 
     cd gde-ideations/01_comet
 
-4. Run the following command to generate the executable binary:
+4. Generate the executable binary:
 
     dart compile exe -o comet bin/main.dart
 
-5. (Optional) Add the comet executable to your system's PATH environment variable, so you can run it from anywhere in your terminal. The exact steps for this will depend on your operating system.
+5. Optionally, add the Comet executable to your system's PATH for global access.
+
+    dart pub global activate --source path .
 
 
 As the Comet project progresses, we plan to publish it on pub.dev, which will make the installation process much simpler. But for now, this manual compilation step is necessary to use the tool.
@@ -69,7 +71,7 @@ To use Comet, simply run the `comet` command in your terminal.
 
 ### Exploring the File System
 
-To explore your file system using Comet, simply run the `comet explore` command in your terminal. You can customize the output by using various flags, such as `--directories`, `--size`, and `--date`.
+To explore your file system using Comet, simply run the `comet explore` command in your terminal. You can customize the output by using various flags, such as `--directories`, `--size`, and `--date`, and the new `--count-lines` to display the line counts of each file.
 
 For example, to list only the directories in the current directory, you can run:
 
