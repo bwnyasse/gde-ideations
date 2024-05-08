@@ -22,19 +22,19 @@ Since Comet is not yet published on pub.dev, you'll need to generate the executa
 
 2. Clone the Comet repository from GitHub:
 
-    git clone https://github.com/bwnyasse/gde-ideations.git
+        git clone https://github.com/bwnyasse/gde-ideations.git
 
 3. Navigate to the `comet` directory in your terminal.
 
-    cd gde-ideations/01_comet
+        cd gde-ideations/01_comet
 
 4. Generate the executable binary:
 
-    dart compile exe -o comet bin/main.dart
+        dart compile exe -o comet bin/main.dart
 
 5. Optionally, add the Comet executable to your system's PATH for global access.
 
-    dart pub global activate --source path .
+        dart pub global activate --source path .
 
 
 As the Comet project progresses, we plan to publish it on pub.dev, which will make the installation process much simpler. But for now, this manual compilation step is necessary to use the tool.
@@ -59,9 +59,9 @@ To use Comet's AI-powered features, you need to set up environment variables for
 
 2. Add the following lines to your `.env` file:
 
-    GEMINI_AI_API_KEY=<your Gemini API key>
-    OAUTH_CLIENT_ID=<your OAuth client ID>
-    OAUTH_CLIENT_SECRET=<your OAuth client secret>
+        GEMINI_AI_API_KEY=<your Gemini API key>
+        OAUTH_CLIENT_ID=<your OAuth client ID>
+        OAUTH_CLIENT_SECRET=<your OAuth client secret>
 
 3. Replace placeholders with your actual keys and credentials.
 
