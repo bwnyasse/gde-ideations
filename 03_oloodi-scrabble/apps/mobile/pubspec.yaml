@@ -1,0 +1,96 @@
+name: oloodi_scrabble_end_user_app
+description: A dynamic Scrabble AI app that enhances the traditional Scrabble game experience using Flutter and Gemini SDK.
+
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none'
+
+# Version number
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+# Dependencies specify other packages that your package needs in order to work.
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # UI and Core
+  cupertino_icons: ^1.0.2
+  google_fonts: ^6.1.0
+  flutter_svg: ^2.0.9
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # Camera and Image Processing
+  camera: ^0.10.5+9
+  image_picker: ^1.0.7
+  path_provider: ^2.1.2
+  path: ^1.8.3
+  
+  # Animations
+  animations: ^2.0.11
+  flutter_animate: ^4.5.0
+  
+  # Gemini SDK
+  google_generative_ai: ^0.2.0
+  
+  # Storage and Database
+  shared_preferences: ^2.2.2
+  sqflite: ^2.3.2
+  
+  # Utils
+  intl: ^0.18.1
+  logger: ^2.0.2+1
+  uuid: ^4.3.3
+  
+  # Network and API
+  http: ^1.2.0
+  connectivity_plus: ^5.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+    
+  # Development Tools
+  flutter_lints: ^3.0.1
+  build_runner: ^2.4.8
+  mockito: ^5.4.4
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.10
+
+# Flutter configuration
+flutter:
+  uses-material-design: true
+  
+  # Assets
+  assets:
+    - assets/images/
+    
+  # Fonts (uncomment and add custom fonts if needed)
+  # fonts:
+  #   - family: CustomFont
+  #     fonts:
+  #       - asset: fonts/CustomFont-Regular.ttf
+  #       - asset: fonts/CustomFont-Bold.ttf
+  #         weight: 700
+
+# Flutter Launcher Icons configuration (customize as needed)
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icons/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icons/app_icon_foreground.png"
+
+# Flutter Native Splash configuration (customize as needed)
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/splash.png
+  android_12:
+    image: assets/images/splash.png
+    color: "#FFFFFF"
+  ios: true
