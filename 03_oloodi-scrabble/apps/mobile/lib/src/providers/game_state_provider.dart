@@ -1,14 +1,20 @@
-import 'package:flutter/foundation.dart';
-import 'package:oloodi_scrabble_end_user_app/src/models/board_square.dart';
-import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
-import 'package:oloodi_scrabble_end_user_app/src/models/tile.dart';
-import 'package:oloodi_scrabble_end_user_app/src/service/mock_game_service.dart';
+import 'package:flutter/material.dart';
+import '../models/board_square.dart';
+import '../models/move.dart';
+import '../models/tile.dart';
+import '../models/player.dart';
+
 class GameStateProvider with ChangeNotifier {
   List<List<BoardSquare>> _board = [];
   List<Move> _moves = [];
-  int _currentPlayerScore = 0;
-  int _opponentScore = 0;
-  
+  String _currentPlayerId = 'p1';  // Track current player
+
+  // Define players
+  final List<Player> players = [
+    Player(id: 'p1', name: 'Player 1', color: Colors.blue[300]!),
+    Player(id: 'p2', name: 'Player 2', color: Colors.green[300]!),
+  ];
+
   GameStateProvider() {
     _initializeBoard();
     _loadSampleMoves();
@@ -60,32 +66,70 @@ class GameStateProvider with ChangeNotifier {
   }
 
   void _loadSampleMoves() {
-    _moves = MockGameService.generateSampleMoves();
-    for (var move in _moves) {
-      _applyMove(move);
+    final sampleMoves = [
+      Move(
+        word: "HELLO",
+        score: 8,
+        playerId: 'p1',
+        timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+        tiles: [
+          PlacedTile(letter: "H", row: 7, col: 7, points: 4),
+          PlacedTile(letter: "E", row: 7, col: 8, points: 1),
+          PlacedTile(letter: "L", row: 7, col: 9, points: 1),
+          PlacedTile(letter: "L", row: 7, col: 10, points: 1),
+          PlacedTile(letter: "O", row: 7, col: 11, points: 1),
+        ],
+      ),
+      Move(
+        word: "WORLD",
+        score: 12,
+        playerId: 'p2',
+        timestamp: DateTime.now().subtract(const Duration(minutes: 2)),
+        tiles: [
+          PlacedTile(letter: "W", row: 7, col: 11, points: 4),
+          PlacedTile(letter: "O", row: 8, col: 11, points: 1),
+          PlacedTile(letter: "R", row: 9, col: 11, points: 1),
+          PlacedTile(letter: "L", row: 10, col: 11, points: 1),
+          PlacedTile(letter: "D", row: 11, col: 11, points: 2),
+        ],
+      ),
+    ];
+
+    for (var move in sampleMoves) {
+      addMove(move);
     }
-    notifyListeners();
   }
 
-  void _applyMove(Move move) {
+  void addMove(Move move) {
+    _moves.add(move);
     for (var tile in move.tiles) {
       _board[tile.row][tile.col].tile = Tile(
         letter: tile.letter,
         points: tile.points,
+        playerId: move.playerId,
+        isNew: true,
       );
     }
-    if (move.playedBy == "Player 1") {
-      _currentPlayerScore += move.score;
-    } else {
-      _opponentScore += move.score;
-    }
+    // Switch current player
+    _currentPlayerId = _currentPlayerId == 'p1' ? 'p2' : 'p1';
+    notifyListeners();
+    
+    // Reset the "new" flag after animation
+    Future.delayed(const Duration(milliseconds: 800), () {
+      for (var tile in move.tiles) {
+        if (_board[tile.row][tile.col].tile != null) {
+          _board[tile.row][tile.col].tile!.isNew = false;
+        }
+      }
+      notifyListeners();
+    });
   }
 
   void simulateNewMove() {
     final move = Move(
       word: "QUIZ",
       score: 22,
-      playedBy: "Player 1",
+      playerId: _currentPlayerId,
       timestamp: DateTime.now(),
       tiles: [
         PlacedTile(letter: "Q", row: 5, col: 5, points: 10),
@@ -95,13 +139,29 @@ class GameStateProvider with ChangeNotifier {
       ],
     );
     
-    _moves.add(move);
-    _applyMove(move);
-    notifyListeners();
+    addMove(move);
   }
 
+  List<Move> getMovesByPlayer(String playerId) {
+    return _moves.where((move) => move.playerId == playerId).toList();
+  }
+
+  int getPlayerScore(String playerId) {
+    return _moves
+        .where((move) => move.playerId == playerId)
+        .fold(0, (sum, move) => sum + move.score);
+  }
+
+  // Getters
   List<List<BoardSquare>> get board => _board;
   List<Move> get moves => _moves;
-  int get currentPlayerScore => _currentPlayerScore;
-  int get opponentScore => _opponentScore;
+  String get currentPlayerId => _currentPlayerId;
+  
+  Player getCurrentPlayer() {
+    return players.firstWhere((player) => player.id == _currentPlayerId);
+  }
+
+  bool isCurrentPlayer(String playerId) {
+    return playerId == _currentPlayerId;
+  }
 }
