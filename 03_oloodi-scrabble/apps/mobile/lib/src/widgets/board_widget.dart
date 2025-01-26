@@ -1,10 +1,15 @@
+// lib/widgets/board_widget.dart
 import 'package:flutter/material.dart';
-import 'package:oloodi_scrabble_end_user_app/src/models/board_square.dart';
-import 'package:oloodi_scrabble_end_user_app/src/models/tile.dart';
 import 'package:provider/provider.dart';
-import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
+import '../providers/game_state_provider.dart';
+import '../models/board_square.dart';
+import '../models/tile.dart';
+
 class BoardWidget extends StatelessWidget {
   const BoardWidget({super.key});
+
+  // Classic Scrabble tile color
+  static const Color scrabbleTileColor = Color(0xFFF7D698); // Light yellow/beige
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +24,7 @@ class BoardWidget extends StatelessWidget {
               crossAxisCount: 15,
               childAspectRatio: 1,
             ),
-            itemCount: 225, // 15x15
+            itemCount: 225,
             itemBuilder: (context, index) {
               final row = index ~/ 15;
               final col = index % 15;
@@ -32,7 +37,7 @@ class BoardWidget extends StatelessWidget {
                   color: _getSquareColor(square.type),
                 ),
                 child: square.tile != null
-                    ? _buildTile(square.tile!)
+                    ? _buildTile(square.tile!, gameState)
                     : _buildSquareContent(square.type),
               );
             },
@@ -42,43 +47,67 @@ class BoardWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildTile(Tile tile) {
-    return Container(
-      margin: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: Colors.orange[100],
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 2,
-            offset: const Offset(1, 1),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Center(
-            child: Text(
-              tile.letter,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+  Widget _buildTile(Tile tile, GameStateProvider gameState) {
+    // Find the player who placed this tile
+    final player = gameState.players.firstWhere(
+      (p) => p.id == tile.playerId,
+      orElse: () => gameState.players[0],
+    );
+
+    return AnimatedScale(
+      scale: tile.isNew ? 0.0 : 1.0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.elasticOut,
+      child: AnimatedRotation(
+        turns: tile.isNew ? -0.5 : 0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.elasticOut,
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: scrabbleTileColor,
+            borderRadius: BorderRadius.circular(4),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 2,
+                offset: const Offset(1, 1),
               ),
+            ],
+            border: Border.all(
+              color: player.color,
+              width: 2.5,
             ),
           ),
-          Positioned(
-            right: 2,
-            bottom: 2,
-            child: Text(
-              '${tile.points}',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
+          child: Stack(
+            children: [
+              // Letter
+              Center(
+                child: Text(
+                  tile.letter,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
               ),
-            ),
+              // Points
+              Positioned(
+                right: 2,
+                bottom: 2,
+                child: Text(
+                  '${tile.points}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -122,15 +151,15 @@ class BoardWidget extends StatelessWidget {
   Color _getSquareColor(SquareType type) {
     switch (type) {
       case SquareType.tripleWord:
-        return Colors.red[200]!;
+        return Colors.red[100]!;
       case SquareType.doubleWord:
-        return Colors.pink[100]!;
+        return Colors.pink[50]!;
       case SquareType.tripleLetter:
-        return Colors.blue[200]!;
+        return Colors.blue[100]!;
       case SquareType.doubleLetter:
-        return Colors.lightBlue[100]!;
+        return Colors.lightBlue[50]!;
       case SquareType.center:
-        return Colors.pink[100]!;
+        return Colors.pink[50]!;
       default:
         return Colors.white;
     }
