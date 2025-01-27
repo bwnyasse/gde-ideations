@@ -4,6 +4,7 @@ import '../models/board_square.dart';
 import '../models/move.dart';
 import '../models/tile.dart';
 import '../models/player.dart';
+
 class GameStateProvider with ChangeNotifier {
   // Board state
   List<List<BoardSquare>> _board = [];
@@ -13,8 +14,18 @@ class GameStateProvider with ChangeNotifier {
 
   // Players
   final List<Player> players = [
-    Player(id: 'p1', name: 'Player 1', color: Colors.blue[300]!),
-    Player(id: 'p2', name: 'Player 2', color: Colors.green[300]!),
+    Player(
+      id: 'p1',
+      name: 'Player 1',
+      color: Colors.blue[300]!,
+      imagePath: 'images/player_1.png',
+    ),
+    Player(
+      id: 'p2',
+      name: 'Player 2',
+      color: Colors.green[300]!,
+      imagePath: 'images/player_2.png',
+    ),
   ];
 
   // Constructor
@@ -41,7 +52,7 @@ class GameStateProvider with ChangeNotifier {
     _moves.clear();
     _currentPlayerId = 'p1';
     _isGameOver = false;
-    
+
     final sampleMoves = MockGameService.generateSampleMoves();
     for (var move in sampleMoves) {
       addMove(move);
@@ -69,13 +80,15 @@ class GameStateProvider with ChangeNotifier {
 
     // Triple Letter Score
     if ((row == 1 || row == 13) && (col == 5 || col == 9) ||
-        (row == 5 || row == 9) && (col == 1 || col == 5 || col == 9 || col == 13)) {
+        (row == 5 || row == 9) &&
+            (col == 1 || col == 5 || col == 9 || col == 13)) {
       return SquareType.tripleLetter;
     }
 
     // Double Letter Score
     if ((row == 3 || row == 11) && (col == 0 || col == 7 || col == 14) ||
-        (row == 6 || row == 8) && (col == 2 || col == 6 || col == 8 || col == 12) ||
+        (row == 6 || row == 8) &&
+            (col == 2 || col == 6 || col == 8 || col == 12) ||
         (row == 0 || row == 7 || row == 14) && (col == 3 || col == 11)) {
       return SquareType.doubleLetter;
     }
@@ -86,7 +99,7 @@ class GameStateProvider with ChangeNotifier {
   // Add a new move to the game
   void addMove(Move move) {
     _moves.add(move);
-    
+
     // Place tiles on board
     for (var tile in move.tiles) {
       _board[tile.row][tile.col].tile = Tile(
@@ -96,12 +109,12 @@ class GameStateProvider with ChangeNotifier {
         isNew: true,
       );
     }
-    
+
     // Switch current player
     _currentPlayerId = _currentPlayerId == 'p1' ? 'p2' : 'p1';
-    
+
     notifyListeners();
-    
+
     // Reset the "new" flag after animation
     Future.delayed(const Duration(milliseconds: 800), () {
       for (var tile in move.tiles) {
@@ -193,16 +206,16 @@ class GameStateProvider with ChangeNotifier {
   List<Tile?> getAdjacentTiles(int row, int col) {
     List<Tile?> adjacentTiles = [];
     final directions = [(-1, 0), (1, 0), (0, -1), (0, 1)];
-    
+
     for (var (dRow, dCol) in directions) {
       final newRow = row + dRow;
       final newCol = col + dCol;
-      
+
       if (newRow >= 0 && newRow < 15 && newCol >= 0 && newCol < 15) {
         adjacentTiles.add(_board[newRow][newCol].tile);
       }
     }
-    
+
     return adjacentTiles;
   }
 
@@ -212,10 +225,10 @@ class GameStateProvider with ChangeNotifier {
   String get currentPlayerId => _currentPlayerId;
   bool get isGameOver => _isGameOver;
   int get remainingLetters => MockGameService.getRemainingLettersCount();
-  
+
   // Get last move
   Move? get lastMove => _moves.isNotEmpty ? _moves.last : null;
-  
+
   // Get current game statistics
   Map<String, int> getGameStats() {
     return {

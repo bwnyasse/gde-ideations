@@ -4,51 +4,88 @@ import 'package:provider/provider.dart';
 import '../providers/game_state_provider.dart';
 import '../models/board_square.dart';
 import '../models/tile.dart';
-
-class BoardWidget extends StatelessWidget {
+// lib/widgets/board_widget.dart
+class BoardWidget extends StatefulWidget {
   const BoardWidget({super.key});
 
-  // Classic Scrabble tile color
-  static const Color scrabbleTileColor = Color(0xFFF7D698); // Light yellow/beige
+  @override
+  State<BoardWidget> createState() => _BoardWidgetState();
+}
+
+class _BoardWidgetState extends State<BoardWidget> {
+  double _scale = 1.0;
+  Offset _offset = Offset.zero;
+  late TransformationController _transformationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _transformationController = TransformationController();
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<GameStateProvider>(
-      builder: (context, gameState, child) {
-        return InteractiveViewer(
-          boundaryMargin: const EdgeInsets.all(20.0),
-          minScale: 0.5,
-          maxScale: 2.5,
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 15,
-              childAspectRatio: 1,
-            ),
-            itemCount: 225,
-            itemBuilder: (context, index) {
-              final row = index ~/ 15;
-              final col = index % 15;
-              final square = gameState.board[row][col];
-              
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.black12),
-                  color: _getSquareColor(square.type),
-                ),
-                child: square.tile != null
-                    ? _buildTile(square.tile!, gameState)
-                    : _buildSquareContent(square.type),
-              );
-            },
-          ),
-        );
+    return GestureDetector(
+      onScaleStart: (details) {
+        _scale = _transformationController.value.getMaxScaleOnAxis();
+        _offset = details.focalPoint;
       },
+      onScaleUpdate: (details) {
+        final newScale = (_scale * details.scale).clamp(0.8, 2.0);
+        final focalPoint = details.focalPoint;
+        _transformationController.value = Matrix4.identity()
+          ..translate(focalPoint.dx - _offset.dx, focalPoint.dy - _offset.dy)
+          ..scale(newScale);
+      },
+      child: InteractiveViewer(
+        transformationController: _transformationController,
+        minScale: 0.8,
+        maxScale: 2.0,
+        child: Consumer<GameStateProvider>(
+          builder: (context, gameState, child) {
+            return AspectRatio(
+              aspectRatio: 1,
+              child: GridView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 15,
+                  childAspectRatio: 1,
+                ),
+                itemCount: 225,
+                itemBuilder: (context, index) {
+                  final row = index ~/ 15;
+                  final col = index % 15;
+                  final square = gameState.board[row][col];
+                  
+                  return _buildSquare(square, gameState);
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSquare(BoardSquare square, GameStateProvider gameState) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.black12),
+        color: _getSquareColor(square.type),
+      ),
+      child: square.tile != null
+          ? _buildTile(square.tile!, gameState)
+          : _buildSquareContent(square.type),
     );
   }
 
   Widget _buildTile(Tile tile, GameStateProvider gameState) {
-    // Find the player who placed this tile
     final player = gameState.players.firstWhere(
       (p) => p.id == tile.playerId,
       orElse: () => gameState.players[0],
@@ -63,9 +100,9 @@ class BoardWidget extends StatelessWidget {
         duration: const Duration(milliseconds: 500),
         curve: Curves.elasticOut,
         child: Container(
-          margin: const EdgeInsets.all(2),
+          margin: const EdgeInsets.all(1),
           decoration: BoxDecoration(
-            color: scrabbleTileColor,
+            color: const Color(0xFFF7D698),
             borderRadius: BorderRadius.circular(4),
             boxShadow: [
               BoxShadow(
@@ -76,30 +113,33 @@ class BoardWidget extends StatelessWidget {
             ],
             border: Border.all(
               color: player.color,
-              width: 2.5,
+              width: 2,
             ),
           ),
           child: Stack(
             children: [
               // Letter
               Center(
-                child: Text(
-                  tile.letter,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    tile.letter,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                 ),
               ),
               // Points
               Positioned(
                 right: 2,
-                bottom: 2,
+                bottom: 0,
                 child: Text(
                   '${tile.points}',
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 8,
                     fontWeight: FontWeight.bold,
                     color: Colors.black54,
                   ),
@@ -138,7 +178,7 @@ class BoardWidget extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: FontWeight.bold,
           color: _getSquareColor(type).computeLuminance() > 0.5
               ? Colors.black54
