@@ -58,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 12),
                       const Text(
-                        'Scrabble\nCompanion',
+                        'Oloodi Scrabble\nAI Companion',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 20,
@@ -150,12 +150,18 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const Divider(color: Colors.white24),
             _buildActionButton(
-              icon: Icons.play_arrow,
-              label: 'Simulate Move',
-              onPressed: gameState.isGameOver
-                  ? null
-                  : () => gameState.simulateNextMove(),
-            ),
+                icon: Icons.update,
+                label: 'Update Board',
+                onPressed: gameState.isGameOver
+                    ? null
+                    : () async {
+                        // To sync board state
+                        try {
+                          await gameState.updateBoard();
+                        } catch (e) {
+                          // Handle error
+                        }
+                      }),
             _buildActionButton(
               icon: _showHistory ? Icons.history_toggle_off : Icons.history,
               label: 'Move History',
@@ -184,10 +190,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   : null,
             ),
             _buildActionButton(
-              icon: Icons.refresh,
-              label: 'Restart Game',
-              onPressed: () => gameState.restartGame(),
-            ),
+                icon: Icons.refresh,
+                label: 'Restart Game',
+                onPressed: () async {
+                  // For future restart functionality
+                  try {
+                    await gameState.restartGame();
+                  } catch (e) {
+                    if (e is UnimplementedError) {
+                      // Show "Coming soon" message
+                    } else {
+                      // Handle other errors
+                    }
+                  }
+                }),
           ],
         );
       },

@@ -49,6 +49,10 @@ dependencies:
   # Network and API
   http: ^1.2.0
   connectivity_plus: ^5.0.2
+  firebase_core: ^3.10.1
+  cloud_firestore: ^5.6.2
+  firebase_auth: ^5.4.1
+  json_annotation: ^4.9.0
 
 dev_dependencies:
   flutter_test:
@@ -56,10 +60,11 @@ dev_dependencies:
     
   # Development Tools
   flutter_lints: ^3.0.1
-  build_runner: ^2.4.8
+  build_runner: ^2.4.13
   mockito: ^5.4.4
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.3.10
+  json_serializable: ^6.9.0
 
 # Flutter configuration
 flutter:

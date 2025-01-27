@@ -1,40 +1,46 @@
+// lib/providers/game_state_provider.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:oloodi_scrabble_end_user_app/src/service/mock_game_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/firebase_service.dart';
 import '../models/board_square.dart';
 import '../models/move.dart';
 import '../models/tile.dart';
 import '../models/player.dart';
 
 class GameStateProvider with ChangeNotifier {
-  // Board state
+  // Services
+  final FirebaseService _firebaseService = FirebaseService();
+
+  // Game state
   List<List<BoardSquare>> _board = [];
   List<Move> _moves = [];
-  String _currentPlayerId = 'p1';
+  List<Player> _players = [];
+  String? _currentPlayerId;
   bool _isGameOver = false;
+  String? _gameId;
 
-  // Players
-  final List<Player> players = [
-    Player(
-      id: 'p1',
-      displayName: 'Papa',
-      color: Colors.blue[300]!,
-      imagePath: 'images/player_1.png',
-    ),
-    Player(
-      id: 'p2',
-      displayName: 'Glenn-Antoine',
-      color: Colors.green[300]!,
-      imagePath: 'images/player_2.png',
-    ),
-  ];
+  // Subscriptions
+  StreamSubscription? _gameSubscription;
+  StreamSubscription? _movesSubscription;
+
+  static const Map<String, int> _initialLetterDistribution = {
+    'A': 9, 'B': 2, 'C': 2, 'D': 3, 'E': 15,
+    'F': 2, 'G': 2, 'H': 2, 'I': 8, 'J': 1,
+    'K': 1, 'L': 5, 'M': 3, 'N': 6, 'O': 6,
+    'P': 2, 'Q': 1, 'R': 6, 'S': 6, 'T': 6,
+    'U': 6, 'V': 2, 'W': 1, 'X': 1, 'Y': 1,
+    'Z': 1, '*': 2, // '*' represents blank/joker tiles
+  };
+
+  Map<String, int> _remainingLetters = Map.from(_initialLetterDistribution);
 
   // Constructor
   GameStateProvider() {
     _initializeBoard();
-    _initializeGame();
   }
 
-  // Initialize the game board
+  // Initialize empty board
   void _initializeBoard() {
     _board = List.generate(15, (row) {
       return List.generate(15, (col) {
@@ -45,25 +51,73 @@ class GameStateProvider with ChangeNotifier {
         );
       });
     });
+    notifyListeners();
   }
 
-  // Initialize game state
-  void _initializeGame() {
-    _moves.clear();
-    _currentPlayerId = 'p1';
-    _isGameOver = false;
+  // Initialize game with QR code data
+  Future<void> initializeGame(String gameId) async {
+    try {
+      _gameId = gameId;
 
-    final sampleMoves = MockGameService.generateSampleMoves();
-    for (var move in sampleMoves) {
-      addMove(move);
+      // Listen to game document for player information and game status
+      _gameSubscription =
+          _firebaseService.listenToGame(gameId).listen((snapshot) {
+        final gameData = snapshot.data() as Map<String, dynamic>;
+        _updateGameInfo(gameData);
+      });
+
+      // Listen to moves collection
+      _movesSubscription = _firebaseService.listenToMoves().listen((snapshot) {
+        for (var change in snapshot.docChanges) {
+          if (change.type == DocumentChangeType.added) {
+            final moveData = change.doc.data() as Map<String, dynamic>;
+            final move = Move.fromJson(moveData);
+            _addMove(move);
+          }
+        }
+      });
+
+      notifyListeners();
+    } catch (e) {
+      print('Error initializing game: $e');
+      rethrow;
     }
+  }
+
+  // Update game information from Firebase
+  void _updateGameInfo(Map<String, dynamic> gameData) {
+    _players = [
+      Player(
+        id: 'p1',
+        displayName: gameData['player1Name'],
+        color: Color(gameData['player1Color']),
+        imagePath: gameData['player1Image'],
+      ),
+      Player(
+        id: 'p2',
+        displayName: gameData['player2Name'],
+        color: Color(gameData['player2Color']),
+        imagePath: gameData['player2Image'],
+      ),
+    ];
+
+    _currentPlayerId = gameData['currentPlayerId'];
+    _isGameOver = gameData['isGameOver'] ?? false;
+
+    // Update remaining letters if provided in gameData
+    if (gameData.containsKey('remainingLetters')) {
+      _remainingLetters = Map<String, int>.from(gameData['remainingLetters']);
+    }
+
     notifyListeners();
   }
 
   // Get square type for board initialization
   SquareType _getSquareType(int row, int col) {
-    // Center square
-    if (row == 7 && col == 7) return SquareType.center;
+    // Center square - acts as Double Word Score
+    if (row == 7 && col == 7) {
+      return SquareType.doubleWord;
+    }
 
     // Triple Word Score
     if ((row == 0 || row == 14) && (col == 0 || col == 7 || col == 14) ||
@@ -73,7 +127,7 @@ class GameStateProvider with ChangeNotifier {
 
     // Double Word Score
     if (row == col || row + col == 14) {
-      if (row >= 1 && row <= 4 || row >= 10 && row <= 13) {
+      if (row >= 1 && row <= 5 || row >= 9 && row <= 13) {
         return SquareType.doubleWord;
       }
     }
@@ -96,58 +150,6 @@ class GameStateProvider with ChangeNotifier {
     return SquareType.normal;
   }
 
-  // Add a new move to the game
-  void addMove(Move move) {
-    _moves.add(move);
-
-    // Place tiles on board
-    for (var tile in move.tiles) {
-      _board[tile.row][tile.col].tile = Tile(
-        letter: tile.letter,
-        points: tile.points,
-        playerId: move.playerId,
-        isNew: true,
-      );
-    }
-
-    // Switch current player
-    _currentPlayerId = _currentPlayerId == 'p1' ? 'p2' : 'p1';
-
-    notifyListeners();
-
-    // Reset the "new" flag after animation
-    Future.delayed(const Duration(milliseconds: 800), () {
-      for (var tile in move.tiles) {
-        if (_board[tile.row][tile.col].tile != null) {
-          _board[tile.row][tile.col].tile!.isNew = false;
-        }
-      }
-      notifyListeners();
-    });
-  }
-
-  // Simulate next move
-  void simulateNextMove() {
-    if (_isGameOver) {
-      return;
-    }
-
-    final nextMove = MockGameService.simulateNextMove(_currentPlayerId);
-    if (nextMove != null) {
-      addMove(nextMove);
-    } else {
-      _isGameOver = true;
-      notifyListeners();
-    }
-  }
-
-  // Restart the game
-  void restartGame() {
-    MockGameService.resetGame();
-    _initializeBoard();
-    _initializeGame();
-  }
-
   // Get moves for a specific player
   List<Move> getMovesByPlayer(String playerId) {
     return _moves.where((move) => move.playerId == playerId).toList();
@@ -162,44 +164,15 @@ class GameStateProvider with ChangeNotifier {
 
   // Get current player
   Player getCurrentPlayer() {
-    return players.firstWhere((player) => player.id == _currentPlayerId);
+    return _players.firstWhere(
+      (player) => player.id == _currentPlayerId,
+      orElse: () => _players.first,
+    );
   }
 
   // Check if it's a specific player's turn
   bool isCurrentPlayer(String playerId) {
     return playerId == _currentPlayerId;
-  }
-
-  // Calculate points for a specific square
-  int getSquarePoints(int row, int col, int basePoints) {
-    final squareType = _board[row][col].type;
-    switch (squareType) {
-      case SquareType.doubleLetter:
-        return basePoints * 2;
-      case SquareType.tripleLetter:
-        return basePoints * 3;
-      default:
-        return basePoints;
-    }
-  }
-
-  // Calculate word multiplier for a move
-  int getWordMultiplier(List<PlacedTile> tiles) {
-    int multiplier = 1;
-    for (var tile in tiles) {
-      final squareType = _board[tile.row][tile.col].type;
-      if (squareType == SquareType.doubleWord) {
-        multiplier *= 2;
-      } else if (squareType == SquareType.tripleWord) {
-        multiplier *= 3;
-      }
-    }
-    return multiplier;
-  }
-
-  // Check if a position is occupied
-  bool isPositionOccupied(int row, int col) {
-    return _board[row][col].tile != null;
   }
 
   // Get adjacent tiles for a position
@@ -219,23 +192,128 @@ class GameStateProvider with ChangeNotifier {
     return adjacentTiles;
   }
 
+  // Cleanup
+  @override
+  void dispose() {
+    _gameSubscription?.cancel();
+    _movesSubscription?.cancel();
+    super.dispose();
+  }
+
   // Getters
   List<List<BoardSquare>> get board => _board;
   List<Move> get moves => _moves;
-  String get currentPlayerId => _currentPlayerId;
+  List<Player> get players => _players;
+  String? get currentPlayerId => _currentPlayerId;
   bool get isGameOver => _isGameOver;
-  int get remainingLetters => MockGameService.getRemainingLettersCount();
-
-  // Get last move
   Move? get lastMove => _moves.isNotEmpty ? _moves.last : null;
 
   // Get current game statistics
   Map<String, int> getGameStats() {
     return {
       'totalMoves': _moves.length,
-      'remainingLetters': remainingLetters,
       'player1Score': getPlayerScore('p1'),
       'player2Score': getPlayerScore('p2'),
     };
   }
+
+  // Fetch current state from Firebase and rebuild board
+  Future<void> updateBoard() async {
+    if (_gameId == null) {
+      throw Exception('No active game session');
+    }
+
+    try {
+      // Get all moves from Firebase in order
+      final movesSnapshot = await _firebaseService.getAllMoves(_gameId!);
+
+      // Clear current board
+      _initializeBoard();
+      _moves.clear();
+
+      // Reapply all moves in order
+      for (var doc in movesSnapshot.docs) {
+        final moveData = doc.data() as Map<String, dynamic>;
+        final move = Move.fromJson(moveData);
+        _addMove(move);
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error updating board: $e');
+      rethrow;
+    }
+  }
+
+  // This will be implemented later to create new game session
+  Future<void> restartGame() async {
+    // For now, just throw not implemented
+    throw UnimplementedError(
+        'Restart game will be implemented in future version');
+
+    // Future implementation will look something like this:
+    /*
+    if (_gameId == null) {
+      throw Exception('No active game session');
+    }
+
+    try {
+      // Create new game session in Firebase
+      await _firebaseService.createNewSession(_gameId!);
+      
+      // Reset local state
+      _initializeBoard();
+      _moves.clear();
+      _isGameOver = false;
+      
+      notifyListeners();
+    } catch (e) {
+      print('Error restarting game: $e');
+      rethrow;
+    }
+    */
+  }
+
+  // Helper method to properly add moves to the board
+  void _addMove(Move move) {
+    _moves.add(move);
+
+    // Update remaining letters based on the move
+    for (var tile in move.tiles) {
+      if (_remainingLetters.containsKey(tile.letter)) {
+        _remainingLetters[tile.letter] = _remainingLetters[tile.letter]! - 1;
+      }
+    }
+
+    // Place tiles on board
+    for (var tile in move.tiles) {
+      _board[tile.row][tile.col].tile = Tile(
+        letter: tile.letter,
+        points: tile.points,
+        playerId: move.playerId,
+        isNew: true,
+      );
+    }
+
+    notifyListeners();
+
+    // Reset the "new" flag after animation
+    Future.delayed(const Duration(milliseconds: 800), () {
+      for (var tile in move.tiles) {
+        if (_board[tile.row][tile.col].tile != null) {
+          _board[tile.row][tile.col].tile!.isNew = false;
+        }
+      }
+      notifyListeners();
+    });
+  }
+
+  // Add getter for remainingLetters
+  int get remainingLetters {
+    return _remainingLetters.values.fold(0, (sum, count) => sum + count);
+  }
+
+  // Optional: Add getter for detailed letter distribution
+  Map<String, int> get letterDistribution =>
+      Map.unmodifiable(_remainingLetters);
 }
