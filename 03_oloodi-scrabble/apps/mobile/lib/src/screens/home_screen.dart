@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 
 import '../widgets/move_history_panel.dart';
 
-// lib/screens/home_screen.dart
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -23,136 +22,206 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scrabble Companion'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              // Show game info/stats
-            },
-          ),
-        ],
-      ),
       body: Row(
         children: [
-          // Main game area
+          // Left Sidebar
+          Container(
+            width: 250,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 5,
+                  offset: const Offset(3, 0),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // App Title
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      Image.asset(
+                        'assets/images/app_icon.png', // Add your app icon
+                        width: 32,
+                        height: 32,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(
+                          Icons.sports_esports,
+                          size: 32,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Scrabble\nCompanion',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white24),
+
+                // Player Cards
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: _buildPlayerCards(),
+                ),
+
+                const Spacer(),
+
+                // Action Buttons
+                _buildActionButtons(),
+
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+
+          // Main Content Area
           Expanded(
             child: Stack(
               children: [
-                Column(
-                  children: [
-                    _buildPlayerScores(context),
-                    const Expanded(child: BoardWidget()),
-                  ],
+                // Board
+                const Center(
+                  child: BoardWidget(),
                 ),
+
+                // Move History Panel
+                if (_showHistory)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 300,
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.horizontal(left: Radius.circular(12)),
+                      ),
+                      child: const MoveHistoryPanel(),
+                    ),
+                  ),
+
+                // Chat Overlay
                 if (_showChat) _buildChatOverlay(),
               ],
             ),
           ),
-          // Move history panel
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: _showHistory ? 300 : 0,
-            child: _showHistory ? const MoveHistoryPanel() : null,
-          ),
         ],
       ),
-      bottomNavigationBar: _buildBottomActionBar(),
     );
   }
 
-  Widget _buildPlayerScores(BuildContext context) {
+  Widget _buildPlayerCards() {
     return Consumer<GameStateProvider>(
       builder: (context, gameState, child) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        return Column(
           children: [
-            for (final player in gameState.players)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: PlayerScoreCard(
-                    player: player,
-                    score: gameState.getPlayerScore(player.id),
-                    isCurrentPlayer: player.id == gameState.currentPlayerId,
-                  ),
-                ),
+            for (final player in gameState.players) ...[
+              PlayerScoreCard(
+                player: player,
+                score: gameState.getPlayerScore(player.id),
+                isCurrentPlayer: player.id == gameState.currentPlayerId,
               ),
+              const SizedBox(height: 12),
+            ],
           ],
         );
       },
     );
   }
 
-  Widget _buildBottomActionBar() {
+  Widget _buildActionButtons() {
     return Consumer<GameStateProvider>(
       builder: (context, gameState, child) {
-        final lastMove = gameState.lastMove;
-
-        return BottomAppBar(
-          color: AppTheme.primaryColor,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                // History toggle
-                IconButton(
-                  icon: Icon(
-                    _showHistory ? Icons.history_toggle_off : Icons.history,
-                    color: _showHistory ? AppTheme.accentColor : Colors.white,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _showHistory = !_showHistory;
-                    });
-                  },
-                  tooltip: 'Move History',
-                ),
-                // Simulate move
-                IconButton(
-                  icon: const Icon(Icons.play_arrow, color: Colors.white),
-                  onPressed: gameState.isGameOver
-                      ? null
-                      : () => gameState.simulateNextMove(),
-                  tooltip: 'Simulate Move',
-                ),
-                // Chat toggle
-                IconButton(
-                  icon: Icon(
-                    _showChat ? Icons.chat_bubble : Icons.chat_bubble_outline,
-                    color: _showChat ? AppTheme.accentColor : Colors.white,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _showChat = !_showChat;
-                    });
-                  },
-                  tooltip: 'Chat',
-                ),
-                // Explain last move
-                IconButton(
-                  icon:
-                      const Icon(Icons.lightbulb_outline, color: Colors.white),
-                  onPressed: lastMove != null
-                      ? () => _showMoveExplanation(lastMove)
-                      : null,
-                  tooltip: 'Explain Last Move',
-                ),
-                // Restart game
-                IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.white),
-                  onPressed: () {
-                    gameState.restartGame();
-                  },
-                  tooltip: 'Restart Game',
-                ),
-              ],
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Divider(color: Colors.white24),
+            _buildActionButton(
+              icon: Icons.play_arrow,
+              label: 'Simulate Move',
+              onPressed: gameState.isGameOver
+                  ? null
+                  : () => gameState.simulateNextMove(),
             ),
-          ),
+            _buildActionButton(
+              icon: _showHistory ? Icons.history_toggle_off : Icons.history,
+              label: 'Move History',
+              isActive: _showHistory,
+              onPressed: () {
+                setState(() {
+                  _showHistory = !_showHistory;
+                });
+              },
+            ),
+            _buildActionButton(
+              icon: _showChat ? Icons.chat_bubble : Icons.chat_bubble_outline,
+              label: 'Chat',
+              isActive: _showChat,
+              onPressed: () {
+                setState(() {
+                  _showChat = !_showChat;
+                });
+              },
+            ),
+            _buildActionButton(
+              icon: Icons.lightbulb_outline,
+              label: 'Explain Last Move',
+              onPressed: gameState.lastMove != null
+                  ? () => _showMoveExplanation(gameState.lastMove!)
+                  : null,
+            ),
+            _buildActionButton(
+              icon: Icons.refresh,
+              label: 'Restart Game',
+              onPressed: () => gameState.restartGame(),
+            ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    bool isActive = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+      child: TextButton.icon(
+        icon: Icon(
+          icon,
+          color: isActive ? AppTheme.accentColor : Colors.white,
+        ),
+        label: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? AppTheme.accentColor : Colors.white,
+          ),
+        ),
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 16,
+          ),
+        ),
+      ),
     );
   }
 

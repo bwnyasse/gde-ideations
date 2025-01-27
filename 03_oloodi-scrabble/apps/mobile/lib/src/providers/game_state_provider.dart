@@ -16,13 +16,13 @@ class GameStateProvider with ChangeNotifier {
   final List<Player> players = [
     Player(
       id: 'p1',
-      name: 'Player 1',
+      displayName: 'Papa',
       color: Colors.blue[300]!,
       imagePath: 'images/player_1.png',
     ),
     Player(
       id: 'p2',
-      name: 'Player 2',
+      displayName: 'Glenn-Antoine',
       color: Colors.green[300]!,
       imagePath: 'images/player_2.png',
     ),
