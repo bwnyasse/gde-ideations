@@ -1,0 +1,32 @@
+name: oloodi_scrabble_moderator_app
+description: Moderator app for Scrabble game management.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  provider: ^6.1.1
+  firebase_core: ^2.24.2
+  cloud_firestore: ^4.13.6
+  google_generative_ai: ^0.2.0
+  camera: ^0.10.5+9
+  qr_flutter: ^4.1.0
+  path_provider: ^2.1.2
+  uuid: ^4.3.3
+  intl: ^0.18.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
