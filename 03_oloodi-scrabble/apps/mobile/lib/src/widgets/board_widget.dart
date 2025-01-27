@@ -84,8 +84,7 @@ class _BoardWidgetState extends State<BoardWidget> {
           : _buildSquareContent(square.type),
     );
   }
-
-  Widget _buildTile(Tile tile, GameStateProvider gameState) {
+Widget _buildTile(Tile tile, GameStateProvider gameState) {
     final player = gameState.players.firstWhere(
       (p) => p.id == tile.playerId,
       orElse: () => gameState.players[0],
@@ -117,29 +116,32 @@ class _BoardWidgetState extends State<BoardWidget> {
             ),
           ),
           child: Stack(
+            fit: StackFit.expand,
             children: [
-              // Letter
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
+              // Letter - left aligned
+              Positioned(
+                left: 4,
+                top: 0,
+                bottom: 0,
+                child: Center(
                   child: Text(
                     tile.letter,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
                   ),
                 ),
               ),
-              // Points
+              // Points - right aligned
               Positioned(
                 right: 2,
-                bottom: 0,
+                bottom: 1,
                 child: Text(
                   '${tile.points}',
                   style: const TextStyle(
-                    fontSize: 8,
+                    fontSize: 7,
                     fontWeight: FontWeight.bold,
                     color: Colors.black54,
                   ),
