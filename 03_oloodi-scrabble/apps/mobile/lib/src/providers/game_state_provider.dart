@@ -132,7 +132,7 @@ class GameStateProvider with ChangeNotifier {
       return;
     }
 
-    final nextMove = MockGameService.simulateNewMove(_currentPlayerId);
+    final nextMove = MockGameService.simulateNextMove(_currentPlayerId);
     if (nextMove != null) {
       addMove(nextMove);
     } else {
