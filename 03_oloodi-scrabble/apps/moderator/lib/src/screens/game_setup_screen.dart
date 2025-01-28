@@ -105,7 +105,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
       // Navigate to monitoring screen
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => GameMonitoringScreen(),
+          builder: (_) => const GameMonitoringScreen(),
         ),
       );
     } finally {

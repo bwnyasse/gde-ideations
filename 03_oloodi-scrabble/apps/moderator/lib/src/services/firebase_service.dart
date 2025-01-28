@@ -4,7 +4,10 @@ import 'package:uuid/uuid.dart';
 import '../models/game_session.dart';
 
 class FirebaseService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
+    app: FirebaseFirestore.instance.app,
+    databaseId: "scrabble",
+  );
   final _uuid = const Uuid();
 
   // Update session QR code
