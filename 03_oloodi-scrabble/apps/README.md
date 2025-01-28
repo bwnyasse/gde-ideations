@@ -1,161 +1,120 @@
-
 # Scrabble Digital Companion Suite
 
 ## 🎯 Elevator Pitch
-The Scrabble Digital Companion Suite is an innovative dual-app solution that bridges the gap between traditional physical Scrabble gameplay and digital score tracking. By combining AI-powered board recognition with real-time game state management, it enhances the classic Scrabble experience while maintaining the tactile pleasure of the physical game.
+The Scrabble Digital Companion Suite is a personal project aimed at enhancing family game nights by bridging the gap between traditional physical Scrabble gameplay and digital score tracking. By combining AI-powered board recognition with real-time game state management, it enhances the classic Scrabble experience while maintaining the tactile pleasure of the physical game.
 
 ## 🌟 Project Overview
-This suite consists of two complementary applications:
+This suite consists of two complementary applications designed to work together seamlessly:
 
-### 1. Scrabble Companion (Player View)
-A digital scoreboard and game state viewer that provides real-time updates of the physical game. Players can view the current board state, track scores, and review move history without interrupting the traditional gameplay experience.
+### 1. Scrabble Moderator (Game Master)
+A powerful tool for the game moderator (typically a family member) to:
+- Manage game sessions
+- Capture board states
+- Validate moves
+- Track scores accurately
+Using AI-powered image recognition, it translates physical board states into digital data, ensuring accurate scoring and game progression tracking.
 
-### 2. Scrabble Moderator (Game Master)
-A powerful tool for game moderators to manage game sessions, capture board states, and validate moves. Using AI-powered image recognition, it translates physical board states into digital data, ensuring accurate scoring and game progression tracking.
+### 2. Scrabble Companion (Player View)
+A digital scoreboard and game state viewer that provides real-time updates of the physical game. Players can:
+- View the current board state
+- Track scores
+- Review move history
+All without interrupting the traditional gameplay experience.
 
-## 🎮 Key Features
-
-### Scrabble Companion (Player View)
-- **Real-time Board Visualization**: Digital representation of the physical game board
-- **Score Tracking**: Automatic calculation and display of player scores
-- **Move History**: Chronological list of all moves with details
-- **Player Statistics**: Individual player performance metrics
-- **Interactive Board**: Zoom and pan capabilities for detailed view
-- **Theme Support**: Modern, visually appealing dark and light themes
+## 🎮 Current Features
 
 ### Scrabble Moderator (Game Master)
-- **Game Session Management**: Create and manage game sessions
-- **Player Registration**: Set up players for each game
-- **AI-Powered Board Recognition**: Capture and analyze board state using Gemini AI
-- **Move Validation**: Ensure moves follow Scrabble rules
-- **QR Code Generation**: Easy game session sharing with players
-- **Real-time Sync**: Instant updates to all connected player views
+- [ ] **Game Session Management**: Create and manage game sessions
+- [ ] **Player Registration**: Set up players for each game
+- [ ] **Board State Capture**: Photograph the board after each move
+- [ ] **Move Validation**: Ensure moves follow Scrabble rules
+- [ ] **QR Code Generation**: Share game session with players
+- [ ] **Real-time Updates**: Push changes to companion app
 
-## 💡 Use Cases
+### Scrabble Companion (Player View)
+- [x] **Real-time Board Visualization**: Digital representation of the physical game
+- [x] **Score Tracking**: Automatic calculation and display
+- [x] **Move History**: Chronological list of all moves
+- [x] **Player Statistics**: Basic performance metrics
+- [x] **Modern UI**: Dark theme optimized for iPad
 
-### Casual Players
-- Track scores without paper and pencil
-- Review previous moves and strategies
-- Learn from game history and statistics
-- Share game progress with friends
+## 🔄 How It Works
 
-### Tournament Organizers
-- Maintain accurate game records
-- Validate moves and scores
-- Share game states with spectators
-- Archive game histories for analysis
+1. **Game Initiation** (Moderator App):
+   - Moderator creates new game session
+   - Enters player names
+   - Generates unique game QR code/ID
 
-### Scrabble Clubs
-- Manage multiple simultaneous games
-- Keep detailed player statistics
-- Create player rankings
-- Analyze gameplay patterns
+2. **Game Connection** (Companion App):
+   - Players can view available game sessions
+   - Select their game from the list
+   - Or scan QR code to join specific session
 
-### Family Game Nights
-- Focus on fun while the app handles scoring
-- Settle disputes with accurate move history
-- Share game progress with remote family members
-- Save memorable games for posterity
+3. **Gameplay Loop**:
+   - Physical game proceeds normally
+   - After each move:
+     - Moderator captures board state
+     - AI analyzes the image
+     - Scores are calculated
+     - All companion apps update automatically
 
 ## 🛠 Technical Stack
 
 ### Frontend
-- Flutter for cross-platform mobile development
+- Flutter for cross-platform development
 - Provider for state management
-- Material Design for UI components
+- Material Design UI components
 
 ### Backend
-- Firebase for real-time data synchronization
-- Cloud Firestore for game state storage
-- Firebase Authentication for user management
+- Firebase Firestore: Real-time game state
+- Firebase Auth: Session management
+- Firebase Storage: Image storage (if needed)
 
 ### AI/ML
-- Google's Gemini AI for board recognition
-- Custom image processing for tile detection
-- Natural Language Processing for move validation
-
-## 🔄 Workflow
-1. Moderator creates new game session
-2. Players join via QR code scan
-3. Physical game proceeds normally
-4. Moderator captures board state after each move
-5. AI processes the image and updates game state
-6. All player views update automatically
-7. Players can review moves and scores in real-time
-
-## 🎯 Target Audience
-- Scrabble enthusiasts
-- Tournament organizers
-- Gaming clubs
-- Families and friend groups
-- Educational institutions
-
-## 🔜 Future Enhancements
-- Multi-language support
-- Tournament management features
-- Advanced analytics and statistics
-- Social sharing capabilities
-- Integration with official Scrabble dictionaries
-- Live streaming capabilities
-- Replay functionality
-- AI-powered move suggestions
+- Google's Gemini API for:
+  - Board state recognition
+  - Move validation
+  - Score calculation
 
 ## 📱 Platform Support
-- iOS devices (iPad optimized)
-- Android tablets
-- Web interface (future)
+- Moderator App: iOS/Android phones
+- Companion App: iPad (primary), other tablets (future)
 
-## 💼 Business Value
-- Enhances traditional Scrabble gameplay
-- Reduces scoring errors and disputes
-- Provides valuable gameplay analytics
-- Creates digital record of games
-- Supports tournament organization
-- Facilitates remote play monitoring
+## 🎯 Initial Target Audience
+Developed primarily for enhancing family game nights, with a focus on:
+- Making score tracking effortless
+- Eliminating scoring disputes
+- Creating a record of family game sessions
+- Making the game more engaging for younger players
 
-## 🌐 Impact
-The Scrabble Digital Companion Suite modernizes the classic board game experience while preserving its traditional charm. It makes score-keeping effortless, ensures fair play, and opens new possibilities for game analysis and improvement.
+## 🔜 Future Enhancements
+- Voice Commentary: AI-powered narration of moves and scores
+- Tournament Mode: Support for competitive play
+- Statistics Dashboard: Detailed player analytics
+- Move Suggestions: AI-powered learning tools
+- Multi-language Support: Particularly French
+- Social Sharing: Share game highlights
+- Cross-Platform Support: Web and Android tablets
+
+## 📋 Project Status
+Currently in active development. See [TASKS.md](TASKS.md) for current development status and upcoming features.
+
+## 🤝 Contributing
+This is currently a personal project focused on family use, but suggestions and feedback are welcome! Open an issue to discuss potential improvements.
+
+## 📝 License
+[Add your chosen license]
 
 ---
 
-## Current Implementation Status
-
-### Completed Features
-- Basic board visualization
-- Player score tracking
-- Move history display
-- Real-time updates
-- Basic game state management
-- Theme implementation
-- Player management
-
-### Pending Features
-1. **AI Integration**
-   - Board state recognition
-   - Move validation
-   - Error detection
-
-2. **Game Management**
-   - Session creation/management
-   - Player registration
-   - Game history storage
-
-3. **User Interface**
-   - Enhanced animations
-   - Gesture controls
-   - Accessibility features
-
-4. **Backend**
-   - Firebase integration
-   - Real-time synchronization
-   - Data persistence
-
-5. **Security**
-   - User authentication
-   - Data validation
-   - Error handling
-
-6. **Additional Features**
-   - Statistics dashboard
-   - Export functionality
-   - Settings management
+## Development Progress
+- ✅ Basic board visualization
+- ✅ Score calculation logic
+- ✅ Move history tracking
+- ✅ Player management
+- ✅ iPad-optimized UI
+- 🔄 Firebase integration (in progress)
+- 🔄 AI board recognition (in progress)
+- ⏳ Session management
+- ⏳ Real-time synchronization
+- ⏳ QR code implementation
