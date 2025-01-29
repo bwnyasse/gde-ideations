@@ -10,7 +10,8 @@ plugins {
 
 android {
     namespace = "com.example.moderator"
-    compileSdk = flutter.compileSdkVersion
+    //compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

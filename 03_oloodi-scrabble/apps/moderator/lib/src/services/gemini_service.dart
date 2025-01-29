@@ -24,8 +24,7 @@ class GeminiService {
     );
   }
 
-  Future<String> _uploadImageToStorage(
-      String sessionId, String imagePath) async {
+Future<String> _uploadImageToStorage(String sessionId, String imagePath) async {
     try {
       final File imageFile = File(imagePath);
       if (!await imageFile.exists()) {
@@ -33,8 +32,16 @@ class GeminiService {
       }
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'moves/${sessionId}_$timestamp.jpg';
+      final fileName = 'moves/${sessionId}_current.jpg';  // Use fixed name for current move
       final ref = _storage.ref().child(fileName);
+      
+      // Delete existing file if it exists
+      try {
+        await ref.delete();
+      } catch (e) {
+        // Ignore error if file doesn't exist
+        print('No existing file to delete');
+      }
 
       // Create upload task
       final uploadTask = ref.putFile(
@@ -50,14 +57,13 @@ class GeminiService {
 
       // Monitor upload progress
       uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        print(
-            'Upload progress: ${snapshot.bytesTransferred}/${snapshot.totalBytes}');
+        print('Upload progress: ${snapshot.bytesTransferred}/${snapshot.totalBytes}');
       });
 
       // Wait for upload to complete
       await uploadTask;
-
-      // Get download URL (optional, if you need it)
+      
+      // Get download URL (optional)
       final downloadUrl = await ref.getDownloadURL();
       print('Image uploaded successfully. Download URL: $downloadUrl');
 

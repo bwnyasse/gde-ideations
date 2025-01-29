@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:oloodi_scrabble_moderator_app/src/widgets/board_overlay_painter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +23,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   String? _error;
   bool _processing = false;
   final GeminiService _geminiService = GeminiService();
+  String? _currentImagePath; // Track the current image path
 
   @override
   void initState() {
@@ -32,7 +36,22 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
+    _cleanupTempImage();
     super.dispose();
+  }
+
+  // Cleanup temporary image
+  Future<void> _cleanupTempImage() async {
+    if (_currentImagePath != null) {
+      try {
+        final file = File(_currentImagePath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (e) {
+        print('Error cleaning up temp image: $e');
+      }
+    }
   }
 
   @override
@@ -88,50 +107,72 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   }
 
   Future<void> _captureAndAnalyze() async {
-    if (_processing ||
-        _controller == null ||
-        !_controller!.value.isInitialized) {
+    if (_processing || _controller == null || !_controller!.value.isInitialized) {
       return;
     }
 
     setState(() => _processing = true);
 
     try {
-      // Show initial processing status
+      // Clean up previous temp image if exists
+      await _cleanupTempImage();
+
+      // Show capturing status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Capturing image...'),
-            duration: Duration(seconds: 1),
-          ),
+          const SnackBar(content: Text('Capturing image...'), duration: Duration(seconds: 1)),
         );
       }
 
       // Capture image
       final image = await _controller!.takePicture();
-
-      // Update status
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Uploading and analyzing image...'),
-            duration: Duration(seconds: 2),
+      
+      // Crop image
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        compressQuality: 100,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Adjust Board Position',
+            toolbarColor: Theme.of(context).primaryColor,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
           ),
-        );
+          IOSUiSettings(
+            title: 'Adjust Board Position',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+          ),
+        ],
+      );
+
+      if (croppedFile == null) {
+        throw Exception('Image cropping cancelled');
       }
+
+      _currentImagePath = croppedFile.path;
 
       // Get current session details
       final gameState = context.read<GameSessionProvider>();
       final session = gameState.currentSession;
-
+      
       if (session == null) {
-        throw Exception('No active game session');
+        throw Exception('No active session');
+      }
+
+      // Show analyzing status
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Analyzing board...'), duration: Duration(seconds: 2)),
+        );
       }
 
       // Analyze with Gemini
       final analysis = await _geminiService.analyzeBoardImage(
         session.id,
-        image.path,
+        croppedFile.path,
       );
 
       if (!mounted) return;
@@ -148,7 +189,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         print('Analysis response: $analysis'); // Debug log
 
         if (analysis['type'] == 'initial') {
-          // Parse initial board setup
           tiles = (analysis['data']['board'] as List)
               .map((tile) => {
                     'letter': tile['letter'],
@@ -157,14 +197,12 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-
+              
           word = tiles.map((t) => t['letter']).join();
           score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
-
-          // Update board state first
+          
           await gameState.updateBoardState(session.id, tiles);
         } else {
-          // Parse delta changes for subsequent moves
           tiles = (analysis['data']['newLetters'] as List)
               .map((tile) => {
                     'letter': tile['letter'],
@@ -173,7 +211,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-
+          
           word = analysis['data']['word'] as String;
           score = analysis['data']['score'] as int;
         }
@@ -182,36 +220,17 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         final confirmed = await _showMoveConfirmation(word, score, tiles);
 
         if (confirmed == true && mounted) {
-          try {
-            // Show saving status
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Saving move...'),
-                duration: Duration(seconds: 1),
-              ),
-            );
+          // Add move to session
+          await gameState.addMove(
+            word: word,
+            score: score,
+            playerId: session.currentPlayerId,
+            tiles: tiles,
+            imagePath: imagePath,
+          );
 
-            // Add move to session
-            await gameState.addMove(
-              word: word,
-              score: score,
-              playerId: session.currentPlayerId,
-              tiles: tiles,
-              imagePath: imagePath, // Pass the stored image path
-            );
-
-            if (mounted) {
-              Navigator.pop(context);
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error saving move: $e'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
+          if (mounted) {
+            Navigator.pop(context);
           }
         }
       } else {
@@ -223,7 +242,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
           SnackBar(
             content: Text('Error: $e'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
           ),
         );
       }
