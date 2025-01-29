@@ -68,9 +68,9 @@ class DefaultFirebaseOptions {
 \n### main.dart\n
 ```dart
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_moderator_app/src/screens/game_sessions_list_screen.dart';
 import 'package:provider/provider.dart';
 import 'src/providers/game_session_provider.dart';
-import 'src/screens/game_setup_screen.dart';
 import 'src/themes/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -95,12 +95,64 @@ class ModeratorApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Scrabble Moderator',
         theme: AppTheme.theme,
-        home: const GameSetupScreen(),
+        home: const GameSessionsListScreen(),
       ),
     );
   }
 }
 ```\n
+\n### src/config/env_config.dart\n
+```dart
+// lib/config/env_config.dart
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+class EnvConfig {
+  static String get geminiApiKey {
+    try {
+      return dotenv.get('GEMINI_API_KEY', fallback: '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  static String get elevenLabsApiKey {
+    try {
+      return dotenv.get('ELEVEN_LABS_API_KEY', fallback: '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  static String get elevenLabsVoiceId {
+    try {
+      return dotenv.get('ELEVEN_LABS_VOICE_ID', fallback: '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  static bool get isConfigured {
+    return geminiApiKey.isNotEmpty && 
+           elevenLabsApiKey.isNotEmpty && 
+           elevenLabsVoiceId.isNotEmpty;
+  }
+
+  static List<String> getMissingConfigurations() {
+    final missing = <String>[];
+    
+    if (geminiApiKey.isEmpty) {
+      missing.add('Gemini API Key');
+    }
+    if (elevenLabsApiKey.isEmpty) {
+      missing.add('ElevenLabs API Key');
+    }
+    if (elevenLabsVoiceId.isEmpty) {
+      missing.add('ElevenLabs Voice ID');
+    }
+    
+    return missing;
+  }
+}```\n
 \n### src/providers/game_session_provider.dart\n
 ```dart
 // lib/src/providers/game_session_provider.dart
@@ -236,6 +288,53 @@ class GameSessionProvider with ChangeNotifier {
   void _clearError() {
     _error = null;
   }
+
+  // Get stream of all sessions
+  Stream<List<GameSession>> getSessions() {
+    return _firebaseService.getGameSessions().map((snapshot) => snapshot.docs
+        .map((doc) => GameSession.fromMap(doc.data() as Map<String, dynamic>))
+        .toList());
+  }
+
+  // Delete multiple sessions
+  Future<void> deleteSessions(List<String> sessionIds) async {
+    try {
+      _setLoading(true);
+      _clearError();
+
+      for (final sessionId in sessionIds) {
+        await _firebaseService.deleteSession(sessionId);
+      }
+    } catch (e) {
+      _setError('Failed to delete sessions: $e');
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // Get session statistics
+  Future<Map<String, dynamic>> getSessionStats(String sessionId) async {
+    try {
+      final moves = await _firebaseService.getSessionMoves(sessionId).first;
+      final remainingLetters =
+          await _firebaseService.getRemainingLetters(sessionId);
+
+      return {
+        'totalMoves': moves.length,
+        'remainingLetters': remainingLetters,
+        'player1Score': moves
+            .where((m) => m['playerId'] == 'p1')
+            .fold(0, (sum, m) => sum + (m['score'] as int)),
+        'player2Score': moves
+            .where((m) => m['playerId'] == 'p2')
+            .fold(0, (sum, m) => sum + (m['score'] as int)),
+      };
+    } catch (e) {
+      _setError('Failed to get session stats: $e');
+      rethrow;
+    }
+  }
 }
 ```\n
 \n### src/models/game_session.dart\n
@@ -300,13 +399,17 @@ import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_moderator_app/src/services/qr_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
-import '../widgets/board_preview_widget.dart';
 import '../widgets/move_history_widget.dart';
 import '../widgets/player_info_widget.dart';
 import 'move_capture_screen.dart';
 
 class GameMonitoringScreen extends StatelessWidget {
-  const GameMonitoringScreen({super.key});
+  final String sessionId;
+
+  const GameMonitoringScreen({
+    super.key,
+    required this.sessionId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -319,49 +422,47 @@ class GameMonitoringScreen extends StatelessWidget {
             onPressed: () => _showQRCode(context),
           ),
           IconButton(
-            icon: const Icon(Icons.camera_alt),
-            onPressed: () => _captureMove(context),
-          ),
-          IconButton(
             icon: const Icon(Icons.stop),
             onPressed: () => _endGame(context),
           ),
         ],
       ),
-      body: Consumer<GameSessionProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
+      body: FutureBuilder<void>(
+        future: context.read<GameSessionProvider>().loadSession(sessionId),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
 
-          if (provider.error != null) {
-            return Center(child: Text(provider.error!));
-          }
+          return Consumer<GameSessionProvider>(
+            builder: (context, provider, child) {
+              if (provider.isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (provider.currentSession == null) {
-            return const Center(child: Text('No active session'));
-          }
+              if (provider.error != null) {
+                return Center(child: Text(provider.error!));
+              }
 
-          return Column(
-            children: [
-              // Player information
-              PlayerInfoWidget(
-                player1Name: provider.currentSession!.player1Name,
-                player2Name: provider.currentSession!.player2Name,
-              ),
-              
-              // Board preview
-              const Expanded(
-                flex: 2,
-                child: BoardPreviewWidget(),
-              ),
-              
-              // Move history
-              const Expanded(
-                flex: 1,
-                child: MoveHistoryWidget(),
-              ),
-            ],
+              if (provider.currentSession == null) {
+                return const Center(child: Text('Session not found'));
+              }
+
+              return Column(
+                children: [
+                  // Player information
+                  PlayerInfoWidget(
+                    player1Name: provider.currentSession!.player1Name,
+                    player2Name: provider.currentSession!.player2Name,
+                  ),
+                  
+                  // Move history
+                  const Expanded(
+                    child: MoveHistoryWidget(),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -374,13 +475,10 @@ class GameMonitoringScreen extends StatelessWidget {
   }
 
   void _showQRCode(BuildContext context) {
-    final session = context.read<GameSessionProvider>().currentSession;
-    if (session == null) return;
-
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => QRDisplayScreen(sessionId: session.id),
+        builder: (_) => QRDisplayScreen(sessionId: sessionId),
       ),
     );
   }
@@ -413,20 +511,299 @@ class GameMonitoringScreen extends StatelessWidget {
       ),
     );
 
-    if (confirmed != true) return;
-
-    if (!context.mounted) return;
+    if (confirmed != true || !context.mounted) return;
 
     try {
       await context.read<GameSessionProvider>().endCurrentSession();
       if (!context.mounted) return;
-      Navigator.of(context).pushReplacementNamed('/');
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to end game: $e')),
       );
     }
+  }
+}```\n
+\n### src/screens/game_sessions_list_screen.dart\n
+```dart
+// lib/src/screens/game_sessions_list_screen.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../providers/game_session_provider.dart';
+import '../models/game_session.dart';
+import 'game_setup_screen.dart';
+import 'game_monitoring_screen.dart';
+
+class GameSessionsListScreen extends StatefulWidget {
+  const GameSessionsListScreen({super.key});
+
+  @override
+  State<GameSessionsListScreen> createState() => _GameSessionsListScreenState();
+}
+
+class _GameSessionsListScreenState extends State<GameSessionsListScreen> {
+  final Set<String> _selectedSessions = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Game Sessions'),
+        actions: [
+          if (_selectedSessions.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: _deleteSelectedSessions,
+            ),
+        ],
+      ),
+      body: StreamBuilder<List<GameSession>>(
+        stream: context.read<GameSessionProvider>().getSessions(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Error: ${snapshot.error}'),
+            );
+          }
+
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final sessions = snapshot.data ?? [];
+          if (sessions.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.sports_esports_outlined, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No game sessions yet',
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Create a new game to get started',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: sessions.length,
+            itemBuilder: (context, index) {
+              final session = sessions[index];
+              return _buildSessionCard(session);
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _navigateToGameSetup(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Start Game'),
+      ),
+    );
+  }
+
+  Widget _buildSessionCard(GameSession session) {
+    final dateFormat = DateFormat('MMM d, y – h:mm a');
+    final isSelected = _selectedSessions.contains(session.id);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: InkWell(
+        onTap: () => _navigateToSession(session),
+        onLongPress: () => _toggleSessionSelection(session.id),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          color: isSelected ? Colors.blue.withOpacity(0.1) : null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '${session.player1Name} vs ${session.player2Name}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (session.isActive)
+                              Container(
+                                margin: const EdgeInsets.only(left: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Active',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          dateFormat.format(session.startTime),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isSelected)
+                    const Icon(Icons.check_circle, color: Colors.blue)
+                  else
+                    const Icon(Icons.chevron_right, color: Colors.grey),
+                ],
+              ),
+              if (session.isActive) ...[
+                const SizedBox(height: 16),
+                _buildGameStats(session),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameStats(GameSession session) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: context.read<GameSessionProvider>().getSessionStats(session.id),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox();
+        }
+
+        final stats = snapshot.data!;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildStatItem('Moves', stats['totalMoves']?.toString() ?? '0'),
+            _buildStatItem('Letters Remaining', stats['remainingLetters']?.toString() ?? '-'),
+            _buildStatItem('Duration', _formatDuration(session.startTime)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDuration(DateTime startTime) {
+    final duration = DateTime.now().difference(startTime);
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+    return '${hours}h ${minutes}m';
+  }
+
+  void _toggleSessionSelection(String sessionId) {
+    setState(() {
+      if (_selectedSessions.contains(sessionId)) {
+        _selectedSessions.remove(sessionId);
+      } else {
+        _selectedSessions.add(sessionId);
+      }
+    });
+  }
+
+  Future<void> _deleteSelectedSessions() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Sessions'),
+        content: Text(
+          'Are you sure you want to delete ${_selectedSessions.length} selected session(s)?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await context.read<GameSessionProvider>().deleteSessions(_selectedSessions.toList());
+        setState(() {
+          _selectedSessions.clear();
+        });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting sessions: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  void _navigateToSession(GameSession session) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GameMonitoringScreen(sessionId: session.id),
+      ),
+    );
+  }
+
+  void _navigateToGameSetup(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const GameSetupScreen(),
+      ),
+    );
   }
 }```\n
 \n### src/screens/qr_display_screen.dart\n
@@ -437,6 +814,7 @@ class GameMonitoringScreen extends StatelessWidget {
 // lib/src/screens/move_capture_screen.dart
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
 import '../services/gemini_service.dart';
@@ -448,118 +826,149 @@ class MoveCaptureScreen extends StatefulWidget {
   State<MoveCaptureScreen> createState() => _MoveCaptureScreenState();
 }
 
-class _MoveCaptureScreenState extends State<MoveCaptureScreen> {
-  late CameraController _controller;
-  late Future<void> _initializeControllerFuture;
-  final GeminiService _geminiService = GeminiService();
+class _MoveCaptureScreenState extends State<MoveCaptureScreen>
+    with WidgetsBindingObserver {
+  CameraController? _controller;
+  bool _isCameraInitialized = false;
+  String? _error;
   bool _processing = false;
+  final GeminiService _geminiService = GeminiService();
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
-  }
-
-  Future<void> _initializeCamera() async {
-    final cameras = await availableCameras();
-    final firstCamera = cameras.first;
-
-    _controller = CameraController(
-      firstCamera,
-      ResolutionPreset.high,
-      enableAudio: false,
-    );
-
-    _initializeControllerFuture = _controller.initialize();
+    WidgetsBinding.instance.addObserver(this);
+    _requestCameraPermission();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Capture Move'),
-      ),
-      body: FutureBuilder<void>(
-        future: _initializeControllerFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            return Column(
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      // Camera preview
-                      CameraPreview(_controller),
-                      
-                      // Overlay guide
-                      CustomPaint(
-                        size: Size.infinite,
-                        painter: BoardOverlayPainter(),
-                      ),
-                      
-                      // Processing indicator
-                      if (_processing)
-                        const Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                    ],
-                  ),
-                ),
-                
-                // Capture instructions
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.black87,
-                  child: const Text(
-                    'Position the board within the guide and ensure good lighting',
-                    style: TextStyle(color: Colors.white),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            );
-          } else {
-            return const Center(child: CircularProgressIndicator());
-          }
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _processing ? null : _captureAndAnalyze,
-        child: const Icon(Icons.camera),
-      ),
-    );
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController? cameraController = _controller;
+
+    if (cameraController == null || !cameraController.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      cameraController.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initializeCamera();
+    }
+  }
+
+  Future<void> _requestCameraPermission() async {
+    var status = await Permission.camera.status;
+    if (status.isGranted) {
+      _initializeCamera();
+      return;
+    }
+
+    status = await Permission.camera.request();
+    if (status.isGranted) {
+      _initializeCamera();
+    } else if (status.isPermanentlyDenied) {
+      if (mounted) {
+        setState(() {
+          _error =
+              'Camera permission was permanently denied. Please enable it in app settings.';
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _error =
+              'Camera permission is required to capture moves. Please grant the permission.';
+        });
+      }
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        setState(() => _error = 'No cameras available');
+        return;
+      }
+
+      final controller = CameraController(
+        cameras.first,
+        ResolutionPreset.max,
+        enableAudio: false,
+      );
+
+      await controller.initialize();
+
+      if (mounted) {
+        setState(() {
+          _controller = controller;
+          _isCameraInitialized = true;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      setState(() => _error = 'Error initializing camera: $e');
+    }
   }
 
   Future<void> _captureAndAnalyze() async {
+    if (_processing ||
+        _controller == null ||
+        !_controller!.value.isInitialized) {
+      return;
+    }
+
+    setState(() => _processing = true);
+
     try {
-      setState(() => _processing = true);
+      // Show processing indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Processing image...')),
+      );
 
       // Capture image
-      final image = await _controller.takePicture();
+      final image = await _controller!.takePicture();
 
+      // Get current player ID
+      final gameState = context.read<GameSessionProvider>();
+      final currentPlayerId = gameState.currentSession?.currentPlayerId;
+
+      if (currentPlayerId == null) {
+        throw Exception('No active game session');
+      }
+      
+      final sessionId = gameState.currentSession!.id;
       // Analyze with Gemini
-      final analysis = await _geminiService.analyzeBoardImage(image.path);
+      final analysis = await _geminiService.analyzeBoardImage(
+        sessionId,
+        image.path,
+      );
 
       if (!mounted) return;
+
+      // Close the processing snackbar
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (analysis['status'] == 'success') {
         // Show confirmation dialog
         final confirmed = await _showMoveConfirmation(analysis['data']);
+
         if (confirmed && mounted) {
           // Add move to session
           await context.read<GameSessionProvider>().addMove(
                 word: analysis['data']['word'],
                 score: analysis['data']['score'],
-                playerId: context.read<GameSessionProvider>().currentSession!.currentPlayerId,
+                playerId: currentPlayerId,
                 tiles: analysis['data']['tiles'],
               );
-          
+
           if (mounted) {
             Navigator.pop(context);
           }
@@ -570,7 +979,10 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -582,29 +994,150 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen> {
 
   Future<bool> _showMoveConfirmation(Map<String, dynamic> moveData) async {
     return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Move'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Word: ${moveData['word']}'),
-            Text('Score: ${moveData['score']} points'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Retake'),
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Confirm Move'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Word: ${moveData['word']}'),
+                const SizedBox(height: 8),
+                Text('Score: ${moveData['score']} points'),
+                if (moveData['tiles'] != null) ...[
+                  const SizedBox(height: 16),
+                  const Text('Tiles placed:'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (var tile in moveData['tiles'])
+                        Chip(
+                          label: Text('${tile['letter']} (${tile['points']})'),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Retake'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Confirm'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm'),
-          ),
-        ],
+        ) ??
+        false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Capture Move'),
       ),
-    ) ?? false;
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.red),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _requestCameraPermission,
+                child: const Text('Grant Camera Permission'),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => openAppSettings(),
+                child: const Text('Open App Settings'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!_isCameraInitialized || _controller == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Camera Preview
+        CameraPreview(_controller!),
+
+        // Capture Guide Overlay
+        CustomPaint(
+          painter: BoardOverlayPainter(),
+        ),
+
+        // Processing Indicator
+        if (_processing)
+          Container(
+            color: Colors.black54,
+            child: const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+          ),
+
+        // Capture Button
+        Positioned(
+          bottom: 32,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: FloatingActionButton(
+              onPressed: _processing ? null : _captureAndAnalyze,
+              child: _processing
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.camera_alt),
+            ),
+          ),
+        ),
+
+        // Instructions
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            color: Colors.black54,
+            padding: const EdgeInsets.all(16),
+            child: const Text(
+              'Position the board within the guide and ensure good lighting',
+              style: TextStyle(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -616,22 +1149,39 @@ class BoardOverlayPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    // Draw guide rectangle
-    final rect = Rect.fromLTWH(
-      size.width * 0.1,
-      size.height * 0.1,
-      size.width * 0.8,
-      size.width * 0.8,
-    );
+    // Calculate square size to maintain aspect ratio
+    final squareSize =
+        size.width < size.height ? size.width * 0.8 : size.height * 0.8;
+    final left = (size.width - squareSize) / 2;
+    final top = (size.height - squareSize) / 2;
+    final rect = Rect.fromLTWH(left, top, squareSize, squareSize);
+
+    // Draw the main rectangle
     canvas.drawRect(rect, paint);
 
     // Draw corner markers
-    final cornerLength = size.width * 0.05;
+    final cornerLength = squareSize * 0.1;
     final corners = [
-      [rect.topLeft, Offset(rect.left + cornerLength, rect.top), Offset(rect.left, rect.top + cornerLength)],
-      [rect.topRight, Offset(rect.right - cornerLength, rect.top), Offset(rect.right, rect.top + cornerLength)],
-      [rect.bottomLeft, Offset(rect.left + cornerLength, rect.bottom), Offset(rect.left, rect.bottom - cornerLength)],
-      [rect.bottomRight, Offset(rect.right - cornerLength, rect.bottom), Offset(rect.right, rect.bottom - cornerLength)],
+      [
+        rect.topLeft,
+        Offset(rect.left + cornerLength, rect.top),
+        Offset(rect.left, rect.top + cornerLength)
+      ],
+      [
+        rect.topRight,
+        Offset(rect.right - cornerLength, rect.top),
+        Offset(rect.right, rect.top + cornerLength)
+      ],
+      [
+        rect.bottomLeft,
+        Offset(rect.left + cornerLength, rect.bottom),
+        Offset(rect.left, rect.bottom - cornerLength)
+      ],
+      [
+        rect.bottomRight,
+        Offset(rect.right - cornerLength, rect.bottom),
+        Offset(rect.right, rect.bottom - cornerLength)
+      ],
     ];
 
     for (final corner in corners) {
@@ -642,7 +1192,8 @@ class BoardOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}```\n
+}
+```\n
 \n### src/screens/game_setup_screen.dart\n
 ```dart
 // lib/src/screens/game_setup_screen.dart
@@ -748,11 +1299,11 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
           );
 
       if (!mounted) return;
-
+      String sessionId = context.read<GameSessionProvider>().currentSession!.id;
       // Navigate to monitoring screen
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => const GameMonitoringScreen(),
+          builder: (_) =>  GameMonitoringScreen(sessionId: sessionId),
         ),
       );
     } finally {
@@ -1019,48 +1570,157 @@ class FirebaseService {
 
     await batch.commit();
   }
+
+  Stream<QuerySnapshot> getGameSessions() {
+    return _firestore
+        .collection('game_sessions')
+        .orderBy('startTime', descending: true)
+        .snapshots();
+  }
+
+  // Delete a session and all its subcollections
+  Future<void> deleteSession(String sessionId) async {
+    // Delete moves subcollection
+    final movesSnapshot = await _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .collection('moves')
+        .get();
+
+    final batch = _firestore.batch();
+
+    for (var doc in movesSnapshot.docs) {
+      batch.delete(doc.reference);
+    }
+
+    // Delete main session document
+    batch.delete(_firestore.collection('game_sessions').doc(sessionId));
+
+    await batch.commit();
+  }
+
+  // Get remaining letters
+  Future<int> getRemainingLetters(String sessionId) async {
+    final doc = await _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .collection('game_state')
+        .doc('letters')
+        .get();
+
+    if (!doc.exists) {
+      return 0;
+    }
+
+    final data = doc.data() as Map<String, dynamic>;
+    return data['remaining'] ?? 0;
+  }
 }
 ```\n
 \n### src/services/gemini_service.dart\n
 ```dart
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:oloodi_scrabble_moderator_app/src/config/env_config.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/firebase_service.dart';
 
 class GeminiService {
-  Future<Map<String, dynamic>> analyzeBoardImage(String imagePath) async {
-    // Mock response data
-    final mockResponseData = {
-      "board": [
-        ["-", "H", "-", "-", "E", "-", "-", "-", "L", "-", "-", "-", "P", "-", "-"],
-        ["-", "-", "A", "-", "-", "-", "T", "-", "-", "-", "A", "-", "-", "-", "-"],
-        ["-", "-", "-", "L", "-", "-", "-", "R", "-", "-", "-", "S", "-", "-", "-"],
-        ["-", "-", "-", "-", "L", "-", "-", "-", "O", "-", "-", "-", "E", "-", "-"],
-        ["-", "-", "-", "-", "-", "O", "-", "-", "-", "N", "-", "-", "-", "R", "-"],
-        ["-", "-", "-", "-", "-", "-", "V", "-", "-", "-", "I", "-", "-", "-", "-"],
-        ["-", "-", "-", "-", "-", "-", "-", "E", "-", "-", "-", "N", "-", "-", "-"],
-        ["-", "-", "-", "-", "-", "-", "-", "-", "S", "-", "-", "-", "T", "-", "-"],
-        ["-", "-", "-", "-", "-", "-", "-", "R", "-", "-", "-", "E", "-", "-", "-"],
-        ["-", "-", "-", "-", "-", "-", "A", "-", "-", "-", "D", "-", "-", "-", "-"],
-        ["-", "-", "-", "-", "-", "P", "-", "-", "-", "E", "-", "-", "-", "-", "-"],
-        ["-", "-", "-", "-", "L", "-", "-", "-", "R", "-", "-", "-", "-", "-", "-"],
-        ["-", "-", "A", "-", "-", "-", "S", "-", "-", "-", "-", "-", "-", "-", "-"],
-        ["-", "-", "-", "T", "-", "-", "-", "O", "-", "-", "-", "-", "-", "-", "-"],
-        ["-", "-", "-", "-", "E", "-", "-", "-", "N", "-", "-", "-", "-", "-", "-"]
-      ],
-      "move": {
-        "word": "PLAYER",
-        "start": {"row": 1, "col": 11},
-        "direction": "vertical",
-        "score": 12
-      }
-    };
+  static const String _apiKey = 'YOUR_GEMINI_API_KEY';
+  late GenerativeModel _model;
+  final FirebaseService _firebaseService = FirebaseService();
 
-    // Simulate API call delay
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Return mock response
-    return {'status': 'success', 'data': mockResponseData};
+  GeminiService() {
+    _model = GenerativeModel(
+      model: 'gemini-1.5-pro',
+      apiKey: EnvConfig.geminiApiKey,
+      generationConfig: GenerationConfig(
+        temperature: 1,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 8192,
+        responseMimeType: 'text/plain',
+      ),
+    );
   }
-}```\n
+
+  Future<Map<String, dynamic>> analyzeBoardImage(
+    String sessionId,
+    String imagePath,
+  ) async {
+    try {
+      // Get previous board state
+      final currentBoard = await _firebaseService.getBoardState(sessionId);
+      final isFirstMove = await currentBoard.isEmpty;
+
+      // Prepare Gemini prompt
+      final prompt = isFirstMove
+          ? '''
+          Analyze this initial Scrabble board image. Return JSON with:
+          {
+            "board": [[15x15 grid with letters or "-" for empty]],
+            "letters": [
+              {"letter": "A", "row": 0, "col": 0, "points": 1},
+              ...
+            ]
+          }
+          '''
+          : '''
+          Compare with previous board state (${currentBoard.toString()}). 
+          Identify new letters. Return JSON with:
+          {
+            "word": "main_word",
+            "letters": [
+              {"letter": "A", "row": 0, "col": 0, "points": 1},
+              ...
+            ],
+            "score": 12
+          }
+          ''';
+
+      // Process image
+      final imageBytes = await File(imagePath).readAsBytes();
+
+      final response = await _model.generateContent([
+        Content.multi([
+          TextPart(prompt),
+          DataPart('image/jpeg', imageBytes),
+        ]),
+      ]);
+
+      return _parseResponse(response.text ?? '', isFirstMove);
+    } catch (e) {
+      return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
+  Map<String, dynamic> _parseResponse(String response, bool isFirstMove) {
+    try {
+      final jsonData = jsonDecode(response);
+
+      if (isFirstMove) {
+        return {
+          'status': 'success',
+          'type': 'initial',
+          'board': jsonData['board'],
+          'letters': List<Map<String, dynamic>>.from(jsonData['letters']),
+        };
+      }
+
+      return {
+        'status': 'success',
+        'type': 'move',
+        'word': jsonData['word'],
+        'score': jsonData['score'],
+        'letters': List<Map<String, dynamic>>.from(jsonData['letters']),
+      };
+    } catch (e) {
+      return {'status': 'error', 'message': 'Invalid response format'};
+    }
+  }
+}
+```\n
 \n### src/services/qr_service.dart\n
 ```dart
 // lib/src/services/qr_service.dart
@@ -1612,12 +2272,14 @@ dependencies:
   provider: ^6.1.1
   firebase_core: ^2.32.0
   cloud_firestore: ^4.13.6
-  google_generative_ai: ^0.2.0
+  google_generative_ai: ^0.4.6
   camera: ^0.10.5+9
   qr_flutter: ^4.1.0
-  path_provider: ^2.1.2
+  path_provider: ^2.1.5
   uuid: ^4.3.3
   intl: ^0.18.1
+  permission_handler: ^11.3.1
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:

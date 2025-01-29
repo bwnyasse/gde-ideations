@@ -1,10 +1,10 @@
-// lib/src/screens/move_capture_screen.dart
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
 import '../services/gemini_service.dart';
+import '../services/firebase_service.dart';
 
 class MoveCaptureScreen extends StatefulWidget {
   const MoveCaptureScreen({super.key});
@@ -20,6 +20,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   String? _error;
   bool _processing = false;
   final GeminiService _geminiService = GeminiService();
+  final FirebaseService _firebaseService = FirebaseService();
 
   @override
   void initState() {
@@ -63,15 +64,13 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     } else if (status.isPermanentlyDenied) {
       if (mounted) {
         setState(() {
-          _error =
-              'Camera permission was permanently denied. Please enable it in app settings.';
+          _error = 'Camera permission was permanently denied. Please enable it in app settings.';
         });
       }
     } else {
       if (mounted) {
         setState(() {
-          _error =
-              'Camera permission is required to capture moves. Please grant the permission.';
+          _error = 'Camera permission is required to capture moves.';
         });
       }
     }
@@ -121,16 +120,22 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       // Capture image
       final image = await _controller!.takePicture();
 
-      // Get current player ID
+      // Get current session details
       final gameState = context.read<GameSessionProvider>();
-      final currentPlayerId = gameState.currentSession?.currentPlayerId;
-
-      if (currentPlayerId == null) {
+      final session = gameState.currentSession;
+      
+      if (session == null) {
         throw Exception('No active game session');
       }
 
+      // Determine if it's the first move and get previous image path
+      final isFirstMove = session.moves.isEmpty;
+      
       // Analyze with Gemini
-      final analysis = await _geminiService.analyzeBoardImage(image.path);
+      final analysis = await _geminiService.analyzeBoardImage(
+        session.id,
+        image.path,
+      );
 
       if (!mounted) return;
 
@@ -138,17 +143,56 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (analysis['status'] == 'success') {
-        // Show confirmation dialog
-        final confirmed = await _showMoveConfirmation(analysis['data']);
+        List<Map<String, dynamic>> tiles = [];
+        String word = '';
+        int score = 0;
 
-        if (confirmed && mounted) {
+        if (isFirstMove) {
+          // Parse initial board setup
+          tiles = (analysis['data']['board'] as List)
+              .map((tile) => {
+                    'letter': tile['letter'],
+                    'row': tile['row'],
+                    'col': tile['col'],
+                    'points': tile['points'],
+                  })
+              .toList();
+              
+          // For first move, we might not have a word/score
+          word = tiles.map((t) => t['letter']).join();
+          score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
+        } else {
+          // Parse delta changes
+          tiles = (analysis['data']['tiles'] as List)
+              .map((tile) => {
+                    'letter': tile['letter'],
+                    'row': tile['row'],
+                    'col': tile['col'],
+                    'points': tile['points'],
+                  })
+              .toList();
+          
+          word = analysis['data']['word'];
+          score = analysis['data']['score'];
+        }
+
+        // Show confirmation dialog
+        final confirmed = await _showMoveConfirmation(word, score, tiles);
+
+        if (confirmed == true && mounted) {
+          // Update Firestore with new tiles
+          await _firebaseService.updateBoardState(session.id, tiles);
+
           // Add move to session
-          await context.read<GameSessionProvider>().addMove(
-                word: analysis['data']['word'],
-                score: analysis['data']['score'],
-                playerId: currentPlayerId,
-                tiles: analysis['data']['tiles'],
-              );
+          await gameState.addMove(
+            word: word,
+            score: score,
+            playerId: session.currentPlayerId,
+            tiles: tiles,
+          );
+
+          // Update session with current image path
+          await _firebaseService.updateSessionImage(session.id, image.path);
 
           if (mounted) {
             Navigator.pop(context);
@@ -173,48 +217,51 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     }
   }
 
-  Future<bool> _showMoveConfirmation(Map<String, dynamic> moveData) async {
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('Confirm Move'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Word: ${moveData['word']}'),
-                const SizedBox(height: 8),
-                Text('Score: ${moveData['score']} points'),
-                if (moveData['tiles'] != null) ...[
-                  const SizedBox(height: 16),
-                  const Text('Tiles placed:'),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (var tile in moveData['tiles'])
-                        Chip(
-                          label: Text('${tile['letter']} (${tile['points']})'),
-                        ),
-                    ],
-                  ),
+  Future<bool?> _showMoveConfirmation(
+    String word,
+    int score,
+    List<Map<String, dynamic>> tiles,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Move'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Word: $word'),
+            const SizedBox(height: 8),
+            Text('Score: $score points'),
+            if (tiles.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text('Tiles placed:'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (var tile in tiles)
+                    Chip(
+                      label: Text('${tile['letter']} (${tile['points']})'),
+                    ),
                 ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Retake'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Confirm'),
               ),
             ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Retake'),
           ),
-        ) ??
-        false;
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -266,11 +313,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         // Camera Preview
         CameraPreview(_controller!),
 
-        // Capture Guide Overlay
-        CustomPaint(
-          painter: BoardOverlayPainter(),
-        ),
-
         // Processing Indicator
         if (_processing)
           Container(
@@ -311,7 +353,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             color: Colors.black54,
             padding: const EdgeInsets.all(16),
             child: const Text(
-              'Position the board within the guide and ensure good lighting',
+              'Position the board within the frame and ensure good lighting',
               style: TextStyle(color: Colors.white),
               textAlign: TextAlign.center,
             ),
@@ -320,40 +362,4 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       ],
     );
   }
-}
-
-class BoardOverlayPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    // Calculate square size to maintain aspect ratio
-    final squareSize = size.width < size.height ? size.width * 0.8 : size.height * 0.8;
-    final left = (size.width - squareSize) / 2;
-    final top = (size.height - squareSize) / 2;
-    final rect = Rect.fromLTWH(left, top, squareSize, squareSize);
-
-    // Draw the main rectangle
-    canvas.drawRect(rect, paint);
-
-    // Draw corner markers
-    final cornerLength = squareSize * 0.1;
-    final corners = [
-      [rect.topLeft, Offset(rect.left + cornerLength, rect.top), Offset(rect.left, rect.top + cornerLength)],
-      [rect.topRight, Offset(rect.right - cornerLength, rect.top), Offset(rect.right, rect.top + cornerLength)],
-      [rect.bottomLeft, Offset(rect.left + cornerLength, rect.bottom), Offset(rect.left, rect.bottom - cornerLength)],
-      [rect.bottomRight, Offset(rect.right - cornerLength, rect.bottom), Offset(rect.right, rect.bottom - cornerLength)],
-    ];
-
-    for (final corner in corners) {
-      canvas.drawLine(corner[0], corner[1], paint);
-      canvas.drawLine(corner[0], corner[2], paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

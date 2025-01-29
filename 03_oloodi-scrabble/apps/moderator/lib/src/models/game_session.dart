@@ -7,7 +7,9 @@ class GameSession {
   final String player2Name;
   final DateTime startTime;
   final String? qrCode;
-  final String currentPlayerId;  // Added this field
+  final String currentPlayerId;
+  final String? lastMoveImagePath;
+  final List<Map<String, dynamic>> moves; // Added moves list
   bool isActive;
 
   GameSession({
@@ -16,12 +18,20 @@ class GameSession {
     required this.player2Name,
     required this.startTime,
     this.qrCode,
-    this.currentPlayerId = 'p1',  // Default to player 1
+    this.currentPlayerId = 'p1',
+    this.lastMoveImagePath,
+    this.moves = const [], // Initialize with empty list by default
     this.isActive = true,
   });
 
-  // Optional: Add a factory constructor to create from Firebase data
+  // Update the fromMap factory constructor
   factory GameSession.fromMap(Map<String, dynamic> data) {
+    // Convert moves data if it exists
+    List<Map<String, dynamic>> movesList = [];
+    if (data['moves'] != null) {
+      movesList = List<Map<String, dynamic>>.from(data['moves']);
+    }
+
     return GameSession(
       id: data['id'],
       player1Name: data['player1Name'],
@@ -29,11 +39,13 @@ class GameSession {
       startTime: (data['startTime'] as Timestamp).toDate(),
       qrCode: data['qrCode'],
       currentPlayerId: data['currentPlayerId'] ?? 'p1',
+      lastMoveImagePath: data['lastMoveImage'],
+      moves: movesList, // Add moves to constructor
       isActive: data['isActive'] ?? true,
     );
   }
 
-  // Optional: Add a method to convert to Map for Firebase
+  // Update the toMap method
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -42,11 +54,12 @@ class GameSession {
       'startTime': startTime,
       'qrCode': qrCode,
       'currentPlayerId': currentPlayerId,
+      'lastMoveImage': lastMoveImagePath,
+      'moves': moves, // Include moves in the map
       'isActive': isActive,
     };
   }
 
-  // Helper method to get the next player's ID
   String getNextPlayerId() {
     return currentPlayerId == 'p1' ? 'p2' : 'p1';
   }

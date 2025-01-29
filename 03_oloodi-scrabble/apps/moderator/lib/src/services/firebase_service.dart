@@ -61,20 +61,6 @@ class FirebaseService {
     });
   }
 
-  // Parse Firestore document to GameSession
-  GameSession _parseSessionDoc(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final timestamp = data['startTime'] as Timestamp;
-
-    return GameSession(
-      id: doc.id,
-      player1Name: data['player1Name'],
-      player2Name: data['player2Name'],
-      startTime: timestamp.toDate(),
-      qrCode: data['qrCode'],
-      isActive: data['isActive'] ?? false,
-    );
-  }
 
 // Get real-time board state updates
   Stream<Map<String, dynamic>> getBoardState(String sessionId) {
@@ -126,17 +112,6 @@ class FirebaseService {
         (sum, doc) => sum + (doc.data()['score'] as int? ?? 0),
       );
     });
-  }
-
-  // Update board state
-  Future<void> updateBoardState(
-      String sessionId, Map<String, dynamic> boardState) async {
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('board_state')
-        .doc('current')
-        .set(boardState, SetOptions(merge: true));
   }
 
   // Update player score (if needed separately from moves)
@@ -287,4 +262,55 @@ class FirebaseService {
     final data = doc.data() as Map<String, dynamic>;
     return data['remaining'] ?? 0;
   }
+
+  // Update the board state with new tiles
+Future<void> updateBoardState(String sessionId, List<Map<String, dynamic>> tiles) async {
+  final batch = _firestore.batch();
+  final boardRef = _firestore
+      .collection('game_sessions')
+      .doc(sessionId)
+      .collection('board_state')
+      .doc('current');
+
+  // Get current board state
+  final currentState = await boardRef.get();
+  Map<String, dynamic> currentData = currentState.data() ?? {};
+
+  // Update with new tiles
+  for (var tile in tiles) {
+    String key = '${tile['row']}-${tile['col']}';
+    currentData[key] = {
+      'letter': tile['letter'],
+      'points': tile['points'],
+      'playerId': tile['playerId'],
+    };
+  }
+
+  batch.set(boardRef, currentData, SetOptions(merge: true));
+  await batch.commit();
+}
+
+// Update the session with the last move's image path
+Future<void> updateSessionImage(String sessionId, String imagePath) async {
+  await _firestore.collection('game_sessions').doc(sessionId).update({
+    'lastMoveImage': imagePath,
+  });
+}
+
+// You should also update your _parseSessionDoc method to include lastMoveImagePath:
+GameSession _parseSessionDoc(DocumentSnapshot doc) {
+  final data = doc.data() as Map<String, dynamic>;
+  final timestamp = data['startTime'] as Timestamp;
+
+  return GameSession(
+    id: doc.id,
+    player1Name: data['player1Name'],
+    player2Name: data['player2Name'],
+    startTime: timestamp.toDate(),
+    qrCode: data['qrCode'],
+    isActive: data['isActive'] ?? false,
+    currentPlayerId: data['currentPlayerId'] ?? 'p1',
+    lastMoveImagePath: data['lastMoveImage'], // Add this field
+  );
+}
 }

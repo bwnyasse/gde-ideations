@@ -13,13 +13,14 @@ dependencies:
   provider: ^6.1.1
   firebase_core: ^2.32.0
   cloud_firestore: ^4.13.6
-  google_generative_ai: ^0.2.0
+  google_generative_ai: ^0.4.6
   camera: ^0.10.5+9
   qr_flutter: ^4.1.0
   path_provider: ^2.1.5
   uuid: ^4.3.3
   intl: ^0.18.1
   permission_handler: ^11.3.1
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -31,3 +32,4 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - .env
