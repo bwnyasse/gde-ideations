@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_moderator_app/src/services/qr_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
-import '../widgets/board_preview_widget.dart';
 import '../widgets/move_history_widget.dart';
 import '../widgets/player_info_widget.dart';
 import 'move_capture_screen.dart';
@@ -20,10 +19,6 @@ class GameMonitoringScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.qr_code),
             onPressed: () => _showQRCode(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.camera_alt),
-            onPressed: () => _captureMove(context),
           ),
           IconButton(
             icon: const Icon(Icons.stop),
@@ -52,16 +47,9 @@ class GameMonitoringScreen extends StatelessWidget {
                 player1Name: provider.currentSession!.player1Name,
                 player2Name: provider.currentSession!.player2Name,
               ),
-              
-              // Board preview
-              const Expanded(
-                flex: 2,
-                child: BoardPreviewWidget(),
-              ),
-              
+
               // Move history
               const Expanded(
-                flex: 1,
                 child: MoveHistoryWidget(),
               ),
             ],
