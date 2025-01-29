@@ -361,6 +361,33 @@ class GameSessionProvider with ChangeNotifier {
   void _clearError() {
     _error = null;
   }
+
+    Future<void> switchCurrentPlayer(String playerId) async {
+    if (_currentSession == null) {
+      _setError('No active session');
+      return;
+    }
+
+    try {
+      _setLoading(true);
+      _clearError();
+
+      // Update current player in Firebase
+      await _firebaseService.switchCurrentPlayer(
+        _currentSession!.id,
+        playerId,
+      );
+
+      // Reload session to get updated state
+      await loadSession(_currentSession!.id);
+
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to switch player: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
 }
 ```\n
 \n### src/models/game_session.g.dart\n
@@ -545,10 +572,12 @@ class GameMonitoringScreen extends StatelessWidget {
 
               return Column(
                 children: [
-                  // Player information
+                  // Player information with selection handlers
                   PlayerInfoWidget(
                     player1Name: provider.currentSession!.player1Name,
                     player2Name: provider.currentSession!.player2Name,
+                    onPlayer1Selected: () => _selectPlayer(context, 'p1'),
+                    onPlayer2Selected: () => _selectPlayer(context, 'p2'),
                   ),
                   
                   // Move history
@@ -567,6 +596,41 @@ class GameMonitoringScreen extends StatelessWidget {
         label: const Text('Capture Move'),
       ),
     );
+  }
+
+  Future<void> _selectPlayer(BuildContext context, String playerId) async {
+    try {
+      // Get the current session
+      final provider = context.read<GameSessionProvider>();
+      final session = provider.currentSession;
+      
+      if (session == null) {
+        throw Exception('No active session');
+      }
+
+      // Only allow changing to a different player
+      if (session.currentPlayerId != playerId) {
+        // Update current player
+        await provider.switchCurrentPlayer(playerId);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Switched to ${playerId == 'p1' ? 'Player 1' : 'Player 2'}\'s turn'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error switching player: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showQRCode(BuildContext context) {
@@ -906,8 +970,12 @@ class _GameSessionsListScreenState extends State<GameSessionsListScreen> {
 ```\n
 \n### src/screens/move_capture_screen.dart\n
 ```dart
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:oloodi_scrabble_moderator_app/src/widgets/board_overlay_painter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
@@ -927,6 +995,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   String? _error;
   bool _processing = false;
   final GeminiService _geminiService = GeminiService();
+  String? _currentImagePath; // Track the current image path
 
   @override
   void initState() {
@@ -939,7 +1008,22 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
+    _cleanupTempImage();
     super.dispose();
+  }
+
+  // Cleanup temporary image
+  Future<void> _cleanupTempImage() async {
+    if (_currentImagePath != null) {
+      try {
+        final file = File(_currentImagePath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (e) {
+        print('Error cleaning up temp image: $e');
+      }
+    }
   }
 
   @override
@@ -995,50 +1079,72 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   }
 
   Future<void> _captureAndAnalyze() async {
-    if (_processing ||
-        _controller == null ||
-        !_controller!.value.isInitialized) {
+    if (_processing || _controller == null || !_controller!.value.isInitialized) {
       return;
     }
 
     setState(() => _processing = true);
 
     try {
-      // Show initial processing status
+      // Clean up previous temp image if exists
+      await _cleanupTempImage();
+
+      // Show capturing status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Capturing image...'),
-            duration: Duration(seconds: 1),
-          ),
+          const SnackBar(content: Text('Capturing image...'), duration: Duration(seconds: 1)),
         );
       }
 
       // Capture image
       final image = await _controller!.takePicture();
-
-      // Update status
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Uploading and analyzing image...'),
-            duration: Duration(seconds: 2),
+      
+      // Crop image
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        compressQuality: 100,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Adjust Board Position',
+            toolbarColor: Theme.of(context).primaryColor,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
           ),
-        );
+          IOSUiSettings(
+            title: 'Adjust Board Position',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+          ),
+        ],
+      );
+
+      if (croppedFile == null) {
+        throw Exception('Image cropping cancelled');
       }
+
+      _currentImagePath = croppedFile.path;
 
       // Get current session details
       final gameState = context.read<GameSessionProvider>();
       final session = gameState.currentSession;
-
+      
       if (session == null) {
-        throw Exception('No active game session');
+        throw Exception('No active session');
+      }
+
+      // Show analyzing status
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Analyzing board...'), duration: Duration(seconds: 2)),
+        );
       }
 
       // Analyze with Gemini
       final analysis = await _geminiService.analyzeBoardImage(
         session.id,
-        image.path,
+        croppedFile.path,
       );
 
       if (!mounted) return;
@@ -1055,7 +1161,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         print('Analysis response: $analysis'); // Debug log
 
         if (analysis['type'] == 'initial') {
-          // Parse initial board setup
           tiles = (analysis['data']['board'] as List)
               .map((tile) => {
                     'letter': tile['letter'],
@@ -1064,14 +1169,12 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-
+              
           word = tiles.map((t) => t['letter']).join();
           score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
-
-          // Update board state first
+          
           await gameState.updateBoardState(session.id, tiles);
         } else {
-          // Parse delta changes for subsequent moves
           tiles = (analysis['data']['newLetters'] as List)
               .map((tile) => {
                     'letter': tile['letter'],
@@ -1080,7 +1183,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-
+          
           word = analysis['data']['word'] as String;
           score = analysis['data']['score'] as int;
         }
@@ -1089,36 +1192,17 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         final confirmed = await _showMoveConfirmation(word, score, tiles);
 
         if (confirmed == true && mounted) {
-          try {
-            // Show saving status
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Saving move...'),
-                duration: Duration(seconds: 1),
-              ),
-            );
+          // Add move to session
+          await gameState.addMove(
+            word: word,
+            score: score,
+            playerId: session.currentPlayerId,
+            tiles: tiles,
+            imagePath: imagePath,
+          );
 
-            // Add move to session
-            await gameState.addMove(
-              word: word,
-              score: score,
-              playerId: session.currentPlayerId,
-              tiles: tiles,
-              imagePath: imagePath, // Pass the stored image path
-            );
-
-            if (mounted) {
-              Navigator.pop(context);
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error saving move: $e'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
+          if (mounted) {
+            Navigator.pop(context);
           }
         }
       } else {
@@ -1130,7 +1214,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
           SnackBar(
             content: Text('Error: $e'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -1233,7 +1316,16 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     return Stack(
       fit: StackFit.expand,
       children: [
+        // Camera Preview
         CameraPreview(_controller!),
+
+        // Board Alignment Overlay
+        CustomPaint(
+          painter: BoardOverlayPainter(),
+          child: Container(),
+        ),
+
+        // Processing Indicator
         if (_processing)
           Container(
             color: Colors.black54,
@@ -1241,6 +1333,8 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
               child: CircularProgressIndicator(color: Colors.white),
             ),
           ),
+
+        // Capture Button
         Positioned(
           bottom: 32,
           left: 0,
@@ -1261,16 +1355,21 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             ),
           ),
         ),
+
+        // Instructions (moved up to avoid button overlap)
         Positioned(
-          bottom: 0,
+          bottom: 100, // Increased bottom padding to move above the button
           left: 0,
           right: 0,
           child: Container(
             color: Colors.black54,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             child: const Text(
-              'Position the board within the frame and ensure good lighting',
-              style: TextStyle(color: Colors.white),
+              'Align the board within the square frame and ensure good lighting',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1780,6 +1879,24 @@ class FirebaseService {
       return null;
     }
   }
+
+  Future<void> switchCurrentPlayer(String sessionId, String playerId) async {
+    await _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .update({'currentPlayerId': playerId});
+  }
+
+    Future<int> getMoveCount(String sessionId) async {
+    final movesSnapshot = await _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .collection('moves')
+        .count()
+        .get();
+    
+    return movesSnapshot.count ?? 0;
+  }
 }
 ```\n
 \n### src/services/gemini_service.dart\n
@@ -1811,15 +1928,14 @@ class GeminiService {
   }
 
   Future<String> _uploadImageToStorage(
-      String sessionId, String imagePath) async {
+      String sessionId, String imagePath, int moveNumber) async {
     try {
       final File imageFile = File(imagePath);
       if (!await imageFile.exists()) {
         throw Exception('Image file not found at $imagePath');
       }
 
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'moves/${sessionId}_$timestamp.jpg';
+      final fileName = 'moves/${sessionId}/${moveNumber}.jpg';
       final ref = _storage.ref().child(fileName);
 
       // Create upload task
@@ -1829,7 +1945,7 @@ class GeminiService {
           contentType: 'image/jpeg',
           customMetadata: {
             'sessionId': sessionId,
-            'timestamp': timestamp.toString(),
+            'moveNumber': moveNumber.toString(),
           },
         ),
       );
@@ -1843,10 +1959,7 @@ class GeminiService {
       // Wait for upload to complete
       await uploadTask;
 
-      // Get download URL (optional, if you need it)
-      final downloadUrl = await ref.getDownloadURL();
-      print('Image uploaded successfully. Download URL: $downloadUrl');
-
+      print('Image uploaded successfully to $fileName');
       return fileName;
     } catch (e) {
       print('Error uploading image: $e');
@@ -1859,13 +1972,20 @@ class GeminiService {
     String imagePath,
   ) async {
     try {
-      // Get previous board state and last image
+      // Get current move number based on existing moves
+      final moveCount = await _firebaseService.getMoveCount(sessionId);
+      final currentMoveNumber = moveCount + 1;
+
+      // Get previous board state
       final boardState = await _firebaseService.getBoardState(sessionId).first;
       final isFirstMove = boardState.isEmpty;
 
-      // Upload current image to Firebase Storage
-      final currentImagePath =
-          await _uploadImageToStorage(sessionId, imagePath);
+      // Upload current image with sequential naming
+      final currentImagePath = await _uploadImageToStorage(
+        sessionId,
+        imagePath,
+        currentMoveNumber,
+      );
 
       // Read current image bytes
       final currentImageBytes = await File(imagePath).readAsBytes();
@@ -1888,20 +2008,17 @@ class GeminiService {
           'type': 'initial',
           'data': _parseGeminiResponse(response.text!, true),
           'imagePath': currentImagePath,
+          'moveNumber': currentMoveNumber,
         };
       } else {
         // Get previous image
-        final lastMove = await _firebaseService.getLastMove(sessionId);
-        if (lastMove == null || lastMove.imagePath == null) {
-          throw Exception('Previous move image not found');
-        }
+        final previousMoveNumber = currentMoveNumber - 1;
+        final previousImageRef =
+            _storage.ref().child('moves/$sessionId/$previousMoveNumber.jpg');
 
-        // Download previous image
-        final prevImageRef = _storage.ref().child(lastMove.imagePath!);
-        final prevImageBytes = await prevImageRef.getData();
-
+        final prevImageBytes = await previousImageRef.getData();
         if (prevImageBytes == null) {
-          throw Exception('Failed to download previous image');
+          throw Exception('Previous move image not found');
         }
 
         // Compare images using Gemini
@@ -1922,6 +2039,7 @@ class GeminiService {
           'type': 'move',
           'data': _parseGeminiResponse(response.text!, false),
           'imagePath': currentImagePath,
+          'moveNumber': currentMoveNumber,
         };
       }
     } catch (e) {
@@ -2240,6 +2358,74 @@ class BoardPreviewWidget extends StatelessWidget {
     }
   }
 }```\n
+\n### src/widgets/board_overlay_painter.dart\n
+```dart
+import 'package:flutter/material.dart';
+
+class BoardOverlayPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    // Calculate square size to maintain aspect ratio
+    final squareSize = size.width < size.height ? size.width * 0.8 : size.height * 0.8;
+    final left = (size.width - squareSize) / 2;
+    final top = (size.height - squareSize) / 2;
+    final rect = Rect.fromLTWH(left, top, squareSize, squareSize);
+
+    // Draw the main square frame
+    canvas.drawRect(rect, paint);
+
+    // Draw corner markers for better alignment
+    final cornerLength = squareSize * 0.1;
+    final corners = [
+      [rect.topLeft, Offset(rect.left + cornerLength, rect.top),
+          Offset(rect.left, rect.top + cornerLength)],
+      [rect.topRight, Offset(rect.right - cornerLength, rect.top),
+          Offset(rect.right, rect.top + cornerLength)],
+      [rect.bottomLeft, Offset(rect.left + cornerLength, rect.bottom),
+          Offset(rect.left, rect.bottom - cornerLength)],
+      [rect.bottomRight, Offset(rect.right - cornerLength, rect.bottom),
+          Offset(rect.right, rect.bottom - cornerLength)],
+    ];
+
+    // Draw corner markers
+    for (final corner in corners) {
+      canvas.drawLine(corner[0] as Offset, corner[1] as Offset, paint);
+      canvas.drawLine(corner[0] as Offset, corner[2] as Offset, paint);
+    }
+
+    // Draw grid lines with lower opacity
+    paint
+      ..color = Colors.white.withOpacity(0.1)
+      ..strokeWidth = 1.0;
+
+    // Draw 15x15 grid
+    for (int i = 1; i < 15; i++) {
+      // Vertical lines
+      final x = left + (squareSize / 15) * i;
+      canvas.drawLine(
+        Offset(x, top),
+        Offset(x, top + squareSize),
+        paint,
+      );
+
+      // Horizontal lines
+      final y = top + (squareSize / 15) * i;
+      canvas.drawLine(
+        Offset(left, y),
+        Offset(left + squareSize, y),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}```\n
 \n### src/widgets/move_history_widget.dart\n
 ```dart
 // lib/src/widgets/move_history_widget.dart
@@ -2403,11 +2589,15 @@ import '../services/firebase_service.dart';
 class PlayerInfoWidget extends StatelessWidget {
   final String player1Name;
   final String player2Name;
+  final VoidCallback? onPlayer1Selected;
+  final VoidCallback? onPlayer2Selected;
 
   const PlayerInfoWidget({
     super.key,
     required this.player1Name,
     required this.player2Name,
+    this.onPlayer1Selected,
+    this.onPlayer2Selected,
   });
 
   @override
@@ -2424,6 +2614,7 @@ class PlayerInfoWidget extends StatelessWidget {
                 name: player1Name,
                 playerId: 'p1',
                 color: Colors.blue[300]!,
+                onTap: onPlayer1Selected,
               ),
             ),
             Container(
@@ -2437,6 +2628,7 @@ class PlayerInfoWidget extends StatelessWidget {
                 name: player2Name,
                 playerId: 'p2',
                 color: Colors.green[300]!,
+                onTap: onPlayer2Selected,
               ),
             ),
           ],
@@ -2450,6 +2642,7 @@ class PlayerInfoWidget extends StatelessWidget {
     required String name,
     required String playerId,
     required Color color,
+    VoidCallback? onTap,
   }) {
     return StreamBuilder<int>(
       stream: FirebaseService().getPlayerScore(
@@ -2462,70 +2655,74 @@ class PlayerInfoWidget extends StatelessWidget {
           (GameSessionProvider p) => p.currentSession?.currentPlayerId == playerId,
         );
 
-        return Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: isCurrentPlayer
-                ? Border.all(color: color, width: 2)
-                : null,
-          ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    backgroundColor: color,
-                    radius: 16,
-                    child: Text(
-                      name[0],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+        return InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: isCurrentPlayer
+                  ? Border.all(color: color, width: 2)
+                  : null,
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: color,
+                      radius: 16,
+                      child: Text(
+                        name[0],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Score: $score',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                if (isCurrentPlayer) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'Current Turn',
+                      style: TextStyle(fontSize: 12),
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Score: $score',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-              if (isCurrentPlayer) ...[
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Current Turn',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
               ],
-            ],
+            ),
           ),
         );
       },
@@ -2562,6 +2759,7 @@ dependencies:
   flutter_dotenv: ^5.2.1
   firebase_storage: ^11.6.5
   json_annotation: ^4.9.0
+  image_cropper: ^8.1.0
 
 dev_dependencies:
   flutter_test:
