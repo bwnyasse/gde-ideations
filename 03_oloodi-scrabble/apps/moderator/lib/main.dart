@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_moderator_app/src/screens/game_sessions_list_screen.dart';
 import 'package:provider/provider.dart';
 import 'src/providers/game_session_provider.dart';
-import 'src/screens/game_setup_screen.dart';
 import 'src/themes/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -26,7 +26,7 @@ class ModeratorApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Scrabble Moderator',
         theme: AppTheme.theme,
-        home: const GameSetupScreen(),
+        home: const GameSessionsListScreen(),
       ),
     );
   }

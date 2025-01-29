@@ -131,4 +131,51 @@ class GameSessionProvider with ChangeNotifier {
   void _clearError() {
     _error = null;
   }
+
+  // Get stream of all sessions
+  Stream<List<GameSession>> getSessions() {
+    return _firebaseService.getGameSessions().map((snapshot) => snapshot.docs
+        .map((doc) => GameSession.fromMap(doc.data() as Map<String, dynamic>))
+        .toList());
+  }
+
+  // Delete multiple sessions
+  Future<void> deleteSessions(List<String> sessionIds) async {
+    try {
+      _setLoading(true);
+      _clearError();
+
+      for (final sessionId in sessionIds) {
+        await _firebaseService.deleteSession(sessionId);
+      }
+    } catch (e) {
+      _setError('Failed to delete sessions: $e');
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // Get session statistics
+  Future<Map<String, dynamic>> getSessionStats(String sessionId) async {
+    try {
+      final moves = await _firebaseService.getSessionMoves(sessionId).first;
+      final remainingLetters =
+          await _firebaseService.getRemainingLetters(sessionId);
+
+      return {
+        'totalMoves': moves.length,
+        'remainingLetters': remainingLetters,
+        'player1Score': moves
+            .where((m) => m['playerId'] == 'p1')
+            .fold(0, (sum, m) => sum + (m['score'] as int)),
+        'player2Score': moves
+            .where((m) => m['playerId'] == 'p2')
+            .fold(0, (sum, m) => sum + (m['score'] as int)),
+      };
+    } catch (e) {
+      _setError('Failed to get session stats: $e');
+      rethrow;
+    }
+  }
 }

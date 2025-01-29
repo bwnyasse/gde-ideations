@@ -8,7 +8,12 @@ import '../widgets/player_info_widget.dart';
 import 'move_capture_screen.dart';
 
 class GameMonitoringScreen extends StatelessWidget {
-  const GameMonitoringScreen({super.key});
+  final String sessionId;
+
+  const GameMonitoringScreen({
+    super.key,
+    required this.sessionId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -26,33 +31,42 @@ class GameMonitoringScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Consumer<GameSessionProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
+      body: FutureBuilder<void>(
+        future: context.read<GameSessionProvider>().loadSession(sessionId),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
 
-          if (provider.error != null) {
-            return Center(child: Text(provider.error!));
-          }
+          return Consumer<GameSessionProvider>(
+            builder: (context, provider, child) {
+              if (provider.isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (provider.currentSession == null) {
-            return const Center(child: Text('No active session'));
-          }
+              if (provider.error != null) {
+                return Center(child: Text(provider.error!));
+              }
 
-          return Column(
-            children: [
-              // Player information
-              PlayerInfoWidget(
-                player1Name: provider.currentSession!.player1Name,
-                player2Name: provider.currentSession!.player2Name,
-              ),
+              if (provider.currentSession == null) {
+                return const Center(child: Text('Session not found'));
+              }
 
-              // Move history
-              const Expanded(
-                child: MoveHistoryWidget(),
-              ),
-            ],
+              return Column(
+                children: [
+                  // Player information
+                  PlayerInfoWidget(
+                    player1Name: provider.currentSession!.player1Name,
+                    player2Name: provider.currentSession!.player2Name,
+                  ),
+                  
+                  // Move history
+                  const Expanded(
+                    child: MoveHistoryWidget(),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -65,13 +79,10 @@ class GameMonitoringScreen extends StatelessWidget {
   }
 
   void _showQRCode(BuildContext context) {
-    final session = context.read<GameSessionProvider>().currentSession;
-    if (session == null) return;
-
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => QRDisplayScreen(sessionId: session.id),
+        builder: (_) => QRDisplayScreen(sessionId: sessionId),
       ),
     );
   }
@@ -104,14 +115,12 @@ class GameMonitoringScreen extends StatelessWidget {
       ),
     );
 
-    if (confirmed != true) return;
-
-    if (!context.mounted) return;
+    if (confirmed != true || !context.mounted) return;
 
     try {
       await context.read<GameSessionProvider>().endCurrentSession();
       if (!context.mounted) return;
-      Navigator.of(context).pushReplacementNamed('/');
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

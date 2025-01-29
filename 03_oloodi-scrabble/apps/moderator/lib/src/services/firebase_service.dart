@@ -242,4 +242,49 @@ class FirebaseService {
 
     await batch.commit();
   }
+
+  Stream<QuerySnapshot> getGameSessions() {
+    return _firestore
+        .collection('game_sessions')
+        .orderBy('startTime', descending: true)
+        .snapshots();
+  }
+
+  // Delete a session and all its subcollections
+  Future<void> deleteSession(String sessionId) async {
+    // Delete moves subcollection
+    final movesSnapshot = await _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .collection('moves')
+        .get();
+
+    final batch = _firestore.batch();
+
+    for (var doc in movesSnapshot.docs) {
+      batch.delete(doc.reference);
+    }
+
+    // Delete main session document
+    batch.delete(_firestore.collection('game_sessions').doc(sessionId));
+
+    await batch.commit();
+  }
+
+  // Get remaining letters
+  Future<int> getRemainingLetters(String sessionId) async {
+    final doc = await _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .collection('game_state')
+        .doc('letters')
+        .get();
+
+    if (!doc.exists) {
+      return 0;
+    }
+
+    final data = doc.data() as Map<String, dynamic>;
+    return data['remaining'] ?? 0;
+  }
 }

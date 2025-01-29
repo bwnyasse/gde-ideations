@@ -101,11 +101,11 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
           );
 
       if (!mounted) return;
-
+      String sessionId = context.read<GameSessionProvider>().currentSession!.id;
       // Navigate to monitoring screen
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => const GameMonitoringScreen(),
+          builder: (_) =>  GameMonitoringScreen(sessionId: sessionId),
         ),
       );
     } finally {
