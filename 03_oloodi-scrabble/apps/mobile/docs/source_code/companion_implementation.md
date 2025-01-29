@@ -2397,6 +2397,7 @@ dependencies:
   cloud_firestore: ^5.6.2
   firebase_auth: ^5.4.1
   json_annotation: ^4.9.0
+  firebase_storage: ^12.4.1
 
 dev_dependencies:
   flutter_test:
