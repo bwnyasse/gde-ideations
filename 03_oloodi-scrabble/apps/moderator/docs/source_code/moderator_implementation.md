@@ -67,6 +67,7 @@ class DefaultFirebaseOptions {
 }```\n
 \n### main.dart\n
 ```dart
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_moderator_app/src/screens/game_sessions_list_screen.dart';
 import 'package:provider/provider.dart';
@@ -80,6 +81,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Initialize Firebase Storage
+  FirebaseStorage.instance.setMaxUploadRetryTime(const Duration(seconds: 3));
+
   runApp(const ModeratorApp());
 }
 
@@ -172,7 +177,8 @@ class GameSessionProvider with ChangeNotifier {
   GameSession? get currentSession => _currentSession;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get hasActiveSession => _currentSession != null && _currentSession!.isActive;
+  bool get hasActiveSession =>
+      _currentSession != null && _currentSession!.isActive;
 
   // Create new game session
   Future<void> createGameSession(String player1Name, String player2Name) async {
@@ -203,12 +209,12 @@ class GameSessionProvider with ChangeNotifier {
     }
   }
 
-  // Add move to current session
   Future<void> addMove({
     required String word,
     required int score,
     required String playerId,
     required List<Map<String, dynamic>> tiles,
+    String? imagePath, // Add this parameter
   }) async {
     if (_currentSession == null) {
       _setError('No active session');
@@ -225,6 +231,7 @@ class GameSessionProvider with ChangeNotifier {
         score: score,
         playerId: playerId,
         tiles: tiles,
+        imagePath: imagePath, // Pass the image path
       );
 
       notifyListeners();
@@ -321,7 +328,8 @@ class GameSessionProvider with ChangeNotifier {
   Future<Map<String, dynamic>> getSessionStats(String sessionId) async {
     try {
       final moves = await _firebaseService.getSessionMoves(sessionId).first;
-      final remainingLetters = await _firebaseService.getRemainingLetters(sessionId);
+      final remainingLetters =
+          await _firebaseService.getRemainingLetters(sessionId);
 
       return {
         'totalMoves': moves.length,
@@ -353,7 +361,8 @@ class GameSessionProvider with ChangeNotifier {
   void _clearError() {
     _error = null;
   }
-}```\n
+}
+```\n
 \n### src/models/game_session.g.dart\n
 ```dart
 // GENERATED CODE - DO NOT MODIFY BY HAND
@@ -995,15 +1004,28 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     setState(() => _processing = true);
 
     try {
-      // Show processing indicator
+      // Show initial processing status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Processing image...')),
+          const SnackBar(
+            content: Text('Capturing image...'),
+            duration: Duration(seconds: 1),
+          ),
         );
       }
 
       // Capture image
       final image = await _controller!.takePicture();
+
+      // Update status
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Uploading and analyzing image...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
 
       // Get current session details
       final gameState = context.read<GameSessionProvider>();
@@ -1021,13 +1043,14 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
 
       if (!mounted) return;
 
-      // Close the processing snackbar
+      // Close any existing snackbars
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (analysis['status'] == 'success') {
         List<Map<String, dynamic>> tiles = [];
         String word = '';
         int score = 0;
+        String? imagePath = analysis['imagePath'];
 
         print('Analysis response: $analysis'); // Debug log
 
@@ -1042,14 +1065,13 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   })
               .toList();
 
-          // For first move
           word = tiles.map((t) => t['letter']).join();
           score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
 
           // Update board state first
           await gameState.updateBoardState(session.id, tiles);
         } else {
-          // Parse delta changes
+          // Parse delta changes for subsequent moves
           tiles = (analysis['data']['newLetters'] as List)
               .map((tile) => {
                     'letter': tile['letter'],
@@ -1067,16 +1089,36 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         final confirmed = await _showMoveConfirmation(word, score, tiles);
 
         if (confirmed == true && mounted) {
-          // Add move to session
-          await gameState.addMove(
-            word: word,
-            score: score,
-            playerId: session.currentPlayerId,
-            tiles: tiles,
-          );
+          try {
+            // Show saving status
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Saving move...'),
+                duration: Duration(seconds: 1),
+              ),
+            );
 
-          if (mounted) {
-            Navigator.pop(context);
+            // Add move to session
+            await gameState.addMove(
+              word: word,
+              score: score,
+              playerId: session.currentPlayerId,
+              tiles: tiles,
+              imagePath: imagePath, // Pass the stored image path
+            );
+
+            if (mounted) {
+              Navigator.pop(context);
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error saving move: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           }
         }
       } else {
@@ -1088,6 +1130,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
           SnackBar(
             content: Text('Error: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -1552,13 +1595,36 @@ class FirebaseService {
     );
   }
 
-  // Update your addMoveToSession method to handle turn switching
+  Future<String?> getLastMoveImage(String sessionId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('moves')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        return null;
+      }
+
+      final moveData = querySnapshot.docs.first.data();
+      return moveData['imagePath'] as String?;
+    } catch (e) {
+      print('Error getting last move image: $e');
+      return null;
+    }
+  }
+
+  // Update the addMoveToSession method to include the image path
   Future<void> addMoveToSession({
     required String sessionId,
     required String word,
     required int score,
     required String playerId,
     required List<Map<String, dynamic>> tiles,
+    String? imagePath, // Add this parameter
   }) async {
     final batch = _firestore.batch();
 
@@ -1575,14 +1641,16 @@ class FirebaseService {
       'playerId': playerId,
       'tiles': tiles,
       'timestamp': FieldValue.serverTimestamp(),
+      'imagePath': imagePath, // Store the image path
     });
 
     // Switch to next player
     final sessionRef = _firestore.collection('game_sessions').doc(sessionId);
-
     final session = await getSession(sessionId);
+
     batch.update(sessionRef, {
       'currentPlayerId': session.getNextPlayerId(),
+      'lastMoveImage': imagePath, // Also store in session for quick access
     });
 
     await batch.commit();
@@ -1742,13 +1810,48 @@ class GeminiService {
     );
   }
 
-  Future<String> _uploadImageToStorage(String sessionId, String imagePath) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'moves/${sessionId}_$timestamp.jpg';
-    final ref = _storage.ref().child(fileName);
-    
-    await ref.putFile(File(imagePath));
-    return fileName;
+  Future<String> _uploadImageToStorage(
+      String sessionId, String imagePath) async {
+    try {
+      final File imageFile = File(imagePath);
+      if (!await imageFile.exists()) {
+        throw Exception('Image file not found at $imagePath');
+      }
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'moves/${sessionId}_$timestamp.jpg';
+      final ref = _storage.ref().child(fileName);
+
+      // Create upload task
+      final uploadTask = ref.putFile(
+        imageFile,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {
+            'sessionId': sessionId,
+            'timestamp': timestamp.toString(),
+          },
+        ),
+      );
+
+      // Monitor upload progress
+      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+        print(
+            'Upload progress: ${snapshot.bytesTransferred}/${snapshot.totalBytes}');
+      });
+
+      // Wait for upload to complete
+      await uploadTask;
+
+      // Get download URL (optional, if you need it)
+      final downloadUrl = await ref.getDownloadURL();
+      print('Image uploaded successfully. Download URL: $downloadUrl');
+
+      return fileName;
+    } catch (e) {
+      print('Error uploading image: $e');
+      throw Exception('Failed to upload image: $e');
+    }
   }
 
   Future<Map<String, dynamic>> analyzeBoardImage(
@@ -1761,8 +1864,9 @@ class GeminiService {
       final isFirstMove = boardState.isEmpty;
 
       // Upload current image to Firebase Storage
-      final currentImagePath = await _uploadImageToStorage(sessionId, imagePath);
-      
+      final currentImagePath =
+          await _uploadImageToStorage(sessionId, imagePath);
+
       // Read current image bytes
       final currentImageBytes = await File(imagePath).readAsBytes();
 
@@ -1895,7 +1999,8 @@ Rules:
       throw Exception('Invalid response format: $e');
     }
   }
-}```\n
+}
+```\n
 \n### src/services/qr_service.dart\n
 ```dart
 // lib/src/services/qr_service.dart
