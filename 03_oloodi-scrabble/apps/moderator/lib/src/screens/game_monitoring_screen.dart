@@ -54,10 +54,12 @@ class GameMonitoringScreen extends StatelessWidget {
 
               return Column(
                 children: [
-                  // Player information
+                  // Player information with selection handlers
                   PlayerInfoWidget(
                     player1Name: provider.currentSession!.player1Name,
                     player2Name: provider.currentSession!.player2Name,
+                    onPlayer1Selected: () => _selectPlayer(context, 'p1'),
+                    onPlayer2Selected: () => _selectPlayer(context, 'p2'),
                   ),
                   
                   // Move history
@@ -76,6 +78,41 @@ class GameMonitoringScreen extends StatelessWidget {
         label: const Text('Capture Move'),
       ),
     );
+  }
+
+  Future<void> _selectPlayer(BuildContext context, String playerId) async {
+    try {
+      // Get the current session
+      final provider = context.read<GameSessionProvider>();
+      final session = provider.currentSession;
+      
+      if (session == null) {
+        throw Exception('No active session');
+      }
+
+      // Only allow changing to a different player
+      if (session.currentPlayerId != playerId) {
+        // Update current player
+        await provider.switchCurrentPlayer(playerId);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Switched to ${playerId == 'p1' ? 'Player 1' : 'Player 2'}\'s turn'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error switching player: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showQRCode(BuildContext context) {

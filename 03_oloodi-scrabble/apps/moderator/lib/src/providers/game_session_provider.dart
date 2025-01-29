@@ -199,4 +199,31 @@ class GameSessionProvider with ChangeNotifier {
   void _clearError() {
     _error = null;
   }
+
+    Future<void> switchCurrentPlayer(String playerId) async {
+    if (_currentSession == null) {
+      _setError('No active session');
+      return;
+    }
+
+    try {
+      _setLoading(true);
+      _clearError();
+
+      // Update current player in Firebase
+      await _firebaseService.switchCurrentPlayer(
+        _currentSession!.id,
+        playerId,
+      );
+
+      // Reload session to get updated state
+      await loadSession(_currentSession!.id);
+
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to switch player: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
 }

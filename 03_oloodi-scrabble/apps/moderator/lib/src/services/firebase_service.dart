@@ -366,4 +366,11 @@ class FirebaseService {
       return null;
     }
   }
+
+  Future<void> switchCurrentPlayer(String sessionId, String playerId) async {
+    await _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .update({'currentPlayerId': playerId});
+  }
 }

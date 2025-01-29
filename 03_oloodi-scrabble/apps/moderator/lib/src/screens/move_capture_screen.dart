@@ -1,5 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_moderator_app/src/widgets/board_overlay_painter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
@@ -325,7 +326,16 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     return Stack(
       fit: StackFit.expand,
       children: [
+        // Camera Preview
         CameraPreview(_controller!),
+
+        // Board Alignment Overlay
+        CustomPaint(
+          painter: BoardOverlayPainter(),
+          child: Container(),
+        ),
+
+        // Processing Indicator
         if (_processing)
           Container(
             color: Colors.black54,
@@ -333,6 +343,8 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
               child: CircularProgressIndicator(color: Colors.white),
             ),
           ),
+
+        // Capture Button
         Positioned(
           bottom: 32,
           left: 0,
@@ -353,16 +365,21 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             ),
           ),
         ),
+
+        // Instructions (moved up to avoid button overlap)
         Positioned(
-          bottom: 0,
+          bottom: 100, // Increased bottom padding to move above the button
           left: 0,
           right: 0,
           child: Container(
             color: Colors.black54,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             child: const Text(
-              'Position the board within the frame and ensure good lighting',
-              style: TextStyle(color: Colors.white),
+              'Align the board within the square frame and ensure good lighting',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
