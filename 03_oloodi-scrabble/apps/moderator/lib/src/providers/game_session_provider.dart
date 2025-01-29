@@ -15,7 +15,8 @@ class GameSessionProvider with ChangeNotifier {
   GameSession? get currentSession => _currentSession;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get hasActiveSession => _currentSession != null && _currentSession!.isActive;
+  bool get hasActiveSession =>
+      _currentSession != null && _currentSession!.isActive;
 
   // Create new game session
   Future<void> createGameSession(String player1Name, String player2Name) async {
@@ -46,12 +47,12 @@ class GameSessionProvider with ChangeNotifier {
     }
   }
 
-  // Add move to current session
   Future<void> addMove({
     required String word,
     required int score,
     required String playerId,
     required List<Map<String, dynamic>> tiles,
+    String? imagePath, // Add this parameter
   }) async {
     if (_currentSession == null) {
       _setError('No active session');
@@ -68,6 +69,7 @@ class GameSessionProvider with ChangeNotifier {
         score: score,
         playerId: playerId,
         tiles: tiles,
+        imagePath: imagePath, // Pass the image path
       );
 
       notifyListeners();
@@ -164,7 +166,8 @@ class GameSessionProvider with ChangeNotifier {
   Future<Map<String, dynamic>> getSessionStats(String sessionId) async {
     try {
       final moves = await _firebaseService.getSessionMoves(sessionId).first;
-      final remainingLetters = await _firebaseService.getRemainingLetters(sessionId);
+      final remainingLetters =
+          await _firebaseService.getRemainingLetters(sessionId);
 
       return {
         'totalMoves': moves.length,

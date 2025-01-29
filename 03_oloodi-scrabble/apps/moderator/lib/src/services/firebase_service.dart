@@ -181,13 +181,36 @@ class FirebaseService {
     );
   }
 
-  // Update your addMoveToSession method to handle turn switching
+  Future<String?> getLastMoveImage(String sessionId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('moves')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        return null;
+      }
+
+      final moveData = querySnapshot.docs.first.data();
+      return moveData['imagePath'] as String?;
+    } catch (e) {
+      print('Error getting last move image: $e');
+      return null;
+    }
+  }
+
+  // Update the addMoveToSession method to include the image path
   Future<void> addMoveToSession({
     required String sessionId,
     required String word,
     required int score,
     required String playerId,
     required List<Map<String, dynamic>> tiles,
+    String? imagePath, // Add this parameter
   }) async {
     final batch = _firestore.batch();
 
@@ -204,14 +227,16 @@ class FirebaseService {
       'playerId': playerId,
       'tiles': tiles,
       'timestamp': FieldValue.serverTimestamp(),
+      'imagePath': imagePath, // Store the image path
     });
 
     // Switch to next player
     final sessionRef = _firestore.collection('game_sessions').doc(sessionId);
-
     final session = await getSession(sessionId);
+
     batch.update(sessionRef, {
       'currentPlayerId': session.getNextPlayerId(),
+      'lastMoveImage': imagePath, // Also store in session for quick access
     });
 
     await batch.commit();

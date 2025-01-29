@@ -196,6 +196,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
               score: score,
               playerId: session.currentPlayerId,
               tiles: tiles,
+              imagePath: imagePath, // Pass the stored image path
             );
 
             if (mounted) {
