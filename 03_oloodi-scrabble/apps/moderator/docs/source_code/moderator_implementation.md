@@ -155,11 +155,10 @@ class EnvConfig {
 }```\n
 \n### src/providers/game_session_provider.dart\n
 ```dart
-// lib/src/providers/game_session_provider.dart
 import 'package:flutter/foundation.dart';
-import 'package:oloodi_scrabble_moderator_app/src/models/game_session.dart';
-import 'package:oloodi_scrabble_moderator_app/src/services/firebase_service.dart';
-import 'package:oloodi_scrabble_moderator_app/src/services/qr_service.dart';
+import '../models/game_session.dart';
+import '../services/firebase_service.dart';
+import '../services/qr_service.dart';
 
 class GameSessionProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
@@ -173,8 +172,7 @@ class GameSessionProvider with ChangeNotifier {
   GameSession? get currentSession => _currentSession;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get hasActiveSession =>
-      _currentSession != null && _currentSession!.isActive;
+  bool get hasActiveSession => _currentSession != null && _currentSession!.isActive;
 
   // Create new game session
   Future<void> createGameSession(String player1Name, String player2Name) async {
@@ -200,28 +198,6 @@ class GameSessionProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _setError('Failed to create game session: $e');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  // End current session
-  Future<void> endCurrentSession() async {
-    if (_currentSession == null) return;
-
-    try {
-      _setLoading(true);
-      _clearError();
-
-      await _firebaseService.updateSessionStatus(
-        _currentSession!.id,
-        false,
-      );
-
-      _currentSession = null;
-      notifyListeners();
-    } catch (e) {
-      _setError('Failed to end session: $e');
     } finally {
       _setLoading(false);
     }
@@ -259,6 +235,27 @@ class GameSessionProvider with ChangeNotifier {
     }
   }
 
+  // Update board state
+  Future<void> updateBoardState(
+    String sessionId,
+    List<Map<String, dynamic>> tiles,
+  ) async {
+    try {
+      _setLoading(true);
+      _clearError();
+
+      // Update in Firebase using tiles directly
+      await _firebaseService.updateBoardState(sessionId, tiles);
+
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to update board state: $e');
+      throw e;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   // Load existing session
   Future<void> loadSession(String sessionId) async {
     try {
@@ -274,25 +271,32 @@ class GameSessionProvider with ChangeNotifier {
     }
   }
 
-  // Helper methods
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
+  // End current session
+  Future<void> endCurrentSession() async {
+    if (_currentSession == null) return;
+
+    try {
+      _setLoading(true);
+      _clearError();
+
+      await _firebaseService.updateSessionStatus(
+        _currentSession!.id,
+        false,
+      );
+
+      _currentSession = null;
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to end session: $e');
+    } finally {
+      _setLoading(false);
+    }
   }
 
-  void _setError(String error) {
-    _error = error;
-    notifyListeners();
-  }
-
-  void _clearError() {
-    _error = null;
-  }
-
-  // Get stream of all sessions
+  // Get all sessions
   Stream<List<GameSession>> getSessions() {
     return _firebaseService.getGameSessions().map((snapshot) => snapshot.docs
-        .map((doc) => GameSession.fromMap(doc.data() as Map<String, dynamic>))
+        .map((doc) => GameSession.fromJson(doc.data() as Map<String, dynamic>))
         .toList());
   }
 
@@ -317,8 +321,7 @@ class GameSessionProvider with ChangeNotifier {
   Future<Map<String, dynamic>> getSessionStats(String sessionId) async {
     try {
       final moves = await _firebaseService.getSessionMoves(sessionId).first;
-      final remainingLetters =
-          await _firebaseService.getRemainingLetters(sessionId);
+      final remainingLetters = await _firebaseService.getRemainingLetters(sessionId);
 
       return {
         'totalMoves': moves.length,
@@ -335,21 +338,124 @@ class GameSessionProvider with ChangeNotifier {
       rethrow;
     }
   }
-}
+
+  // Helper methods
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+
+  void _setError(String error) {
+    _error = error;
+    notifyListeners();
+  }
+
+  void _clearError() {
+    _error = null;
+  }
+}```\n
+\n### src/models/game_session.g.dart\n
+```dart
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'game_session.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+Move _$MoveFromJson(Map<String, dynamic> json) => Move(
+      word: json['word'] as String,
+      score: (json['score'] as num).toInt(),
+      tiles: (json['tiles'] as List<dynamic>)
+          .map((e) => e as Map<String, dynamic>)
+          .toList(),
+      playerId: json['playerId'] as String,
+      timestamp: Move._timestampFromJson(json['timestamp'] as Timestamp),
+      imagePath: json['imagePath'] as String?,
+    );
+
+Map<String, dynamic> _$MoveToJson(Move instance) => <String, dynamic>{
+      'word': instance.word,
+      'score': instance.score,
+      'tiles': instance.tiles,
+      'playerId': instance.playerId,
+      'timestamp': Move._timestampToJson(instance.timestamp),
+      'imagePath': instance.imagePath,
+    };
+
+GameSession _$GameSessionFromJson(Map<String, dynamic> json) => GameSession(
+      id: json['id'] as String,
+      player1Name: json['player1Name'] as String,
+      player2Name: json['player2Name'] as String,
+      startTime: GameSession._timestampFromJson(json['startTime'] as Timestamp),
+      qrCode: json['qrCode'] as String?,
+      currentPlayerId: json['currentPlayerId'] as String? ?? 'p1',
+      moves: (json['moves'] as List<dynamic>?)
+              ?.map((e) => Move.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      isActive: json['isActive'] as bool? ?? true,
+    );
+
+Map<String, dynamic> _$GameSessionToJson(GameSession instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'player1Name': instance.player1Name,
+      'player2Name': instance.player2Name,
+      'startTime': GameSession._timestampToJson(instance.startTime),
+      'qrCode': instance.qrCode,
+      'currentPlayerId': instance.currentPlayerId,
+      'moves': instance.moves,
+      'isActive': instance.isActive,
+    };
 ```\n
 \n### src/models/game_session.dart\n
 ```dart
-// lib/src/models/game_session.dart
+// move.dart
+import 'package:json_annotation/json_annotation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+part 'game_session.g.dart';
+
+@JsonSerializable()
+class Move {
+  final String word;
+  final int score;
+  final List<Map<String, dynamic>> tiles;
+  final String playerId;
+  @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
+  final DateTime timestamp;
+  final String? imagePath;
+
+  Move({
+    required this.word,
+    required this.score,
+    required this.tiles,
+    required this.playerId,
+    required this.timestamp,
+    this.imagePath,
+  });
+
+  factory Move.fromJson(Map<String, dynamic> json) => _$MoveFromJson(json);
+  Map<String, dynamic> toJson() => _$MoveToJson(this);
+
+  static DateTime _timestampFromJson(Timestamp timestamp) => timestamp.toDate();
+  static Timestamp _timestampToJson(DateTime date) => Timestamp.fromDate(date);
+}
+
+@JsonSerializable()
 class GameSession {
   final String id;
   final String player1Name;
   final String player2Name;
+  @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
   final DateTime startTime;
   final String? qrCode;
-  final String currentPlayerId;  // Added this field
-  bool isActive;
+  final String currentPlayerId;
+  @JsonKey(defaultValue: [])
+  final List<Move> moves;
+  final bool isActive;
 
   GameSession({
     required this.id,
@@ -357,40 +463,20 @@ class GameSession {
     required this.player2Name,
     required this.startTime,
     this.qrCode,
-    this.currentPlayerId = 'p1',  // Default to player 1
+    this.currentPlayerId = 'p1',
+    this.moves = const [],
     this.isActive = true,
   });
 
-  // Optional: Add a factory constructor to create from Firebase data
-  factory GameSession.fromMap(Map<String, dynamic> data) {
-    return GameSession(
-      id: data['id'],
-      player1Name: data['player1Name'],
-      player2Name: data['player2Name'],
-      startTime: (data['startTime'] as Timestamp).toDate(),
-      qrCode: data['qrCode'],
-      currentPlayerId: data['currentPlayerId'] ?? 'p1',
-      isActive: data['isActive'] ?? true,
-    );
-  }
+  factory GameSession.fromJson(Map<String, dynamic> json) =>
+      _$GameSessionFromJson(json);
+  Map<String, dynamic> toJson() => _$GameSessionToJson(this);
 
-  // Optional: Add a method to convert to Map for Firebase
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'player1Name': player1Name,
-      'player2Name': player2Name,
-      'startTime': startTime,
-      'qrCode': qrCode,
-      'currentPlayerId': currentPlayerId,
-      'isActive': isActive,
-    };
-  }
+  static DateTime _timestampFromJson(Timestamp timestamp) => timestamp.toDate();
+  static Timestamp _timestampToJson(DateTime date) => Timestamp.fromDate(date);
 
-  // Helper method to get the next player's ID
-  String getNextPlayerId() {
-    return currentPlayerId == 'p1' ? 'p2' : 'p1';
-  }
+  String getNextPlayerId() => currentPlayerId == 'p1' ? 'p2' : 'p1';
+  Move? get lastMove => moves.isNotEmpty ? moves.last : null;
 }```\n
 \n### src/screens/game_monitoring_screen.dart\n
 ```dart
@@ -811,7 +897,6 @@ class _GameSessionsListScreenState extends State<GameSessionsListScreen> {
 ```\n
 \n### src/screens/move_capture_screen.dart\n
 ```dart
-// lib/src/screens/move_capture_screen.dart
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -850,41 +935,23 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? cameraController = _controller;
-
-    if (cameraController == null || !cameraController.value.isInitialized) {
-      return;
-    }
-
     if (state == AppLifecycleState.inactive) {
-      cameraController.dispose();
+      _controller?.dispose();
     } else if (state == AppLifecycleState.resumed) {
       _initializeCamera();
     }
   }
 
   Future<void> _requestCameraPermission() async {
-    var status = await Permission.camera.status;
-    if (status.isGranted) {
-      _initializeCamera();
-      return;
-    }
-
-    status = await Permission.camera.request();
-    if (status.isGranted) {
-      _initializeCamera();
-    } else if (status.isPermanentlyDenied) {
-      if (mounted) {
+    var status = await Permission.camera.request();
+    if (mounted) {
+      if (status.isGranted) {
+        _initializeCamera();
+      } else {
         setState(() {
-          _error =
-              'Camera permission was permanently denied. Please enable it in app settings.';
-        });
-      }
-    } else {
-      if (mounted) {
-        setState(() {
-          _error =
-              'Camera permission is required to capture moves. Please grant the permission.';
+          _error = status.isPermanentlyDenied
+              ? 'Camera permission permanently denied. Please enable it in settings.'
+              : 'Camera permission is required to capture moves.';
         });
       }
     }
@@ -929,25 +996,26 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
 
     try {
       // Show processing indicator
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Processing image...')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Processing image...')),
+        );
+      }
 
       // Capture image
       final image = await _controller!.takePicture();
 
-      // Get current player ID
+      // Get current session details
       final gameState = context.read<GameSessionProvider>();
-      final currentPlayerId = gameState.currentSession?.currentPlayerId;
+      final session = gameState.currentSession;
 
-      if (currentPlayerId == null) {
+      if (session == null) {
         throw Exception('No active game session');
       }
-      
-      final sessionId = gameState.currentSession!.id;
+
       // Analyze with Gemini
       final analysis = await _geminiService.analyzeBoardImage(
-        sessionId,
+        session.id,
         image.path,
       );
 
@@ -957,17 +1025,55 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (analysis['status'] == 'success') {
-        // Show confirmation dialog
-        final confirmed = await _showMoveConfirmation(analysis['data']);
+        List<Map<String, dynamic>> tiles = [];
+        String word = '';
+        int score = 0;
 
-        if (confirmed && mounted) {
+        print('Analysis response: $analysis'); // Debug log
+
+        if (analysis['type'] == 'initial') {
+          // Parse initial board setup
+          tiles = (analysis['data']['board'] as List)
+              .map((tile) => {
+                    'letter': tile['letter'],
+                    'row': tile['row'],
+                    'col': tile['col'],
+                    'points': tile['points'],
+                  })
+              .toList();
+
+          // For first move
+          word = tiles.map((t) => t['letter']).join();
+          score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
+
+          // Update board state first
+          await gameState.updateBoardState(session.id, tiles);
+        } else {
+          // Parse delta changes
+          tiles = (analysis['data']['newLetters'] as List)
+              .map((tile) => {
+                    'letter': tile['letter'],
+                    'row': tile['row'],
+                    'col': tile['col'],
+                    'points': tile['points'],
+                  })
+              .toList();
+
+          word = analysis['data']['word'] as String;
+          score = analysis['data']['score'] as int;
+        }
+
+        // Show confirmation dialog
+        final confirmed = await _showMoveConfirmation(word, score, tiles);
+
+        if (confirmed == true && mounted) {
           // Add move to session
-          await context.read<GameSessionProvider>().addMove(
-                word: analysis['data']['word'],
-                score: analysis['data']['score'],
-                playerId: currentPlayerId,
-                tiles: analysis['data']['tiles'],
-              );
+          await gameState.addMove(
+            word: word,
+            score: score,
+            playerId: session.currentPlayerId,
+            tiles: tiles,
+          );
 
           if (mounted) {
             Navigator.pop(context);
@@ -992,48 +1098,51 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     }
   }
 
-  Future<bool> _showMoveConfirmation(Map<String, dynamic> moveData) async {
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('Confirm Move'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Word: ${moveData['word']}'),
-                const SizedBox(height: 8),
-                Text('Score: ${moveData['score']} points'),
-                if (moveData['tiles'] != null) ...[
-                  const SizedBox(height: 16),
-                  const Text('Tiles placed:'),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (var tile in moveData['tiles'])
-                        Chip(
-                          label: Text('${tile['letter']} (${tile['points']})'),
-                        ),
-                    ],
-                  ),
+  Future<bool?> _showMoveConfirmation(
+    String word,
+    int score,
+    List<Map<String, dynamic>> tiles,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Move'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Word: $word'),
+            const SizedBox(height: 8),
+            Text('Score: $score points'),
+            if (tiles.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text('Tiles placed:'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (var tile in tiles)
+                    Chip(
+                      label: Text('${tile['letter']} (${tile['points']})'),
+                    ),
                 ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Retake'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Confirm'),
               ),
             ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Retake'),
           ),
-        ) ??
-        false;
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1078,19 +1187,10 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     if (!_isCameraInitialized || _controller == null) {
       return const Center(child: CircularProgressIndicator());
     }
-
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Camera Preview
         CameraPreview(_controller!),
-
-        // Capture Guide Overlay
-        CustomPaint(
-          painter: BoardOverlayPainter(),
-        ),
-
-        // Processing Indicator
         if (_processing)
           Container(
             color: Colors.black54,
@@ -1098,8 +1198,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
               child: CircularProgressIndicator(color: Colors.white),
             ),
           ),
-
-        // Capture Button
         Positioned(
           bottom: 32,
           left: 0,
@@ -1120,8 +1218,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             ),
           ),
         ),
-
-        // Instructions
         Positioned(
           bottom: 0,
           left: 0,
@@ -1130,7 +1226,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             color: Colors.black54,
             padding: const EdgeInsets.all(16),
             child: const Text(
-              'Position the board within the guide and ensure good lighting',
+              'Position the board within the frame and ensure good lighting',
               style: TextStyle(color: Colors.white),
               textAlign: TextAlign.center,
             ),
@@ -1139,59 +1235,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       ],
     );
   }
-}
-
-class BoardOverlayPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    // Calculate square size to maintain aspect ratio
-    final squareSize =
-        size.width < size.height ? size.width * 0.8 : size.height * 0.8;
-    final left = (size.width - squareSize) / 2;
-    final top = (size.height - squareSize) / 2;
-    final rect = Rect.fromLTWH(left, top, squareSize, squareSize);
-
-    // Draw the main rectangle
-    canvas.drawRect(rect, paint);
-
-    // Draw corner markers
-    final cornerLength = squareSize * 0.1;
-    final corners = [
-      [
-        rect.topLeft,
-        Offset(rect.left + cornerLength, rect.top),
-        Offset(rect.left, rect.top + cornerLength)
-      ],
-      [
-        rect.topRight,
-        Offset(rect.right - cornerLength, rect.top),
-        Offset(rect.right, rect.top + cornerLength)
-      ],
-      [
-        rect.bottomLeft,
-        Offset(rect.left + cornerLength, rect.bottom),
-        Offset(rect.left, rect.bottom - cornerLength)
-      ],
-      [
-        rect.bottomRight,
-        Offset(rect.right - cornerLength, rect.bottom),
-        Offset(rect.right, rect.bottom - cornerLength)
-      ],
-    ];
-
-    for (final corner in corners) {
-      canvas.drawLine(corner[0], corner[1], paint);
-      canvas.drawLine(corner[0], corner[2], paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 ```\n
 \n### src/screens/game_setup_screen.dart\n
@@ -1389,21 +1432,6 @@ class FirebaseService {
     });
   }
 
-  // Parse Firestore document to GameSession
-  GameSession _parseSessionDoc(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final timestamp = data['startTime'] as Timestamp;
-
-    return GameSession(
-      id: doc.id,
-      player1Name: data['player1Name'],
-      player2Name: data['player2Name'],
-      startTime: timestamp.toDate(),
-      qrCode: data['qrCode'],
-      isActive: data['isActive'] ?? false,
-    );
-  }
-
 // Get real-time board state updates
   Stream<Map<String, dynamic>> getBoardState(String sessionId) {
     return _firestore
@@ -1454,17 +1482,6 @@ class FirebaseService {
         (sum, doc) => sum + (doc.data()['score'] as int? ?? 0),
       );
     });
-  }
-
-  // Update board state
-  Future<void> updateBoardState(
-      String sessionId, Map<String, dynamic> boardState) async {
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('board_state')
-        .doc('current')
-        .set(boardState, SetOptions(merge: true));
   }
 
   // Update player score (if needed separately from moves)
@@ -1615,28 +1632,108 @@ class FirebaseService {
     final data = doc.data() as Map<String, dynamic>;
     return data['remaining'] ?? 0;
   }
+
+  // Update the board state with new tiles
+  Future<void> updateBoardState(
+      String sessionId, List<Map<String, dynamic>> tiles) async {
+    final batch = _firestore.batch();
+    final boardRef = _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .collection('board_state')
+        .doc('current');
+
+    // Get current board state
+    final currentState = await boardRef.get();
+    Map<String, dynamic> currentData = currentState.data() ?? {};
+
+    // Update with new tiles
+    for (var tile in tiles) {
+      String key = '${tile['row']}-${tile['col']}';
+      currentData[key] = {
+        'letter': tile['letter'],
+        'points': tile['points'],
+        'playerId': tile['playerId'],
+      };
+    }
+
+    batch.set(boardRef, currentData, SetOptions(merge: true));
+    await batch.commit();
+  }
+
+// Update the session with the last move's image path
+  Future<void> updateSessionImage(String sessionId, String imagePath) async {
+    await _firestore.collection('game_sessions').doc(sessionId).update({
+      'lastMoveImage': imagePath,
+    });
+  }
+
+  GameSession _parseSessionDoc(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final timestamp = data['startTime'] as Timestamp;
+
+    // Get moves from the document if they exist
+    List<Move> moves = [];
+    if (data['moves'] != null) {
+      moves = (data['moves'] as List)
+          .map((moveData) => Move.fromJson(moveData))
+          .toList();
+    }
+
+    return GameSession(
+      id: doc.id,
+      player1Name: data['player1Name'],
+      player2Name: data['player2Name'],
+      startTime: timestamp.toDate(),
+      qrCode: data['qrCode'],
+      isActive: data['isActive'] ?? false,
+      currentPlayerId: data['currentPlayerId'] ?? 'p1',
+      moves: moves,
+    );
+  }
+
+  Future<Move?> getLastMove(String sessionId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('moves')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        return null;
+      }
+
+      return Move.fromJson(querySnapshot.docs.first.data());
+    } catch (e) {
+      print('Error getting last move: $e');
+      return null;
+    }
+  }
 }
 ```\n
 \n### src/services/gemini_service.dart\n
 ```dart
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:oloodi_scrabble_moderator_app/src/config/env_config.dart';
-import 'package:oloodi_scrabble_moderator_app/src/services/firebase_service.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import '../config/env_config.dart';
+import '../services/firebase_service.dart';
 
 class GeminiService {
-  static const String _apiKey = 'YOUR_GEMINI_API_KEY';
   late GenerativeModel _model;
   final FirebaseService _firebaseService = FirebaseService();
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   GeminiService() {
     _model = GenerativeModel(
       model: 'gemini-1.5-pro',
-      apiKey: EnvConfig.geminiApiKey,
+      apiKey: 'AIzaSyAMRHzq6_i_jVDUfxOooscv5riCNIxqyXQ',
       generationConfig: GenerationConfig(
-        temperature: 1,
+        temperature: 0.7,
         topK: 40,
         topP: 0.95,
         maxOutputTokens: 8192,
@@ -1645,82 +1742,160 @@ class GeminiService {
     );
   }
 
+  Future<String> _uploadImageToStorage(String sessionId, String imagePath) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'moves/${sessionId}_$timestamp.jpg';
+    final ref = _storage.ref().child(fileName);
+    
+    await ref.putFile(File(imagePath));
+    return fileName;
+  }
+
   Future<Map<String, dynamic>> analyzeBoardImage(
     String sessionId,
     String imagePath,
   ) async {
     try {
-      // Get previous board state
-      final currentBoard = await _firebaseService.getBoardState(sessionId);
-      final isFirstMove = await currentBoard.isEmpty;
+      // Get previous board state and last image
+      final boardState = await _firebaseService.getBoardState(sessionId).first;
+      final isFirstMove = boardState.isEmpty;
 
-      // Prepare Gemini prompt
-      final prompt = isFirstMove
-          ? '''
-          Analyze this initial Scrabble board image. Return JSON with:
-          {
-            "board": [[15x15 grid with letters or "-" for empty]],
-            "letters": [
-              {"letter": "A", "row": 0, "col": 0, "points": 1},
-              ...
-            ]
-          }
-          '''
-          : '''
-          Compare with previous board state (${currentBoard.toString()}). 
-          Identify new letters. Return JSON with:
-          {
-            "word": "main_word",
-            "letters": [
-              {"letter": "A", "row": 0, "col": 0, "points": 1},
-              ...
-            ],
-            "score": 12
-          }
-          ''';
-
-      // Process image
-      final imageBytes = await File(imagePath).readAsBytes();
-
-      final response = await _model.generateContent([
-        Content.multi([
-          TextPart(prompt),
-          DataPart('image/jpeg', imageBytes),
-        ]),
-      ]);
-
-      return _parseResponse(response.text ?? '', isFirstMove);
-    } catch (e) {
-      return {'status': 'error', 'message': e.toString()};
-    }
-  }
-
-  Map<String, dynamic> _parseResponse(String response, bool isFirstMove) {
-    try {
-      final jsonData = jsonDecode(response);
+      // Upload current image to Firebase Storage
+      final currentImagePath = await _uploadImageToStorage(sessionId, imagePath);
+      
+      // Read current image bytes
+      final currentImageBytes = await File(imagePath).readAsBytes();
 
       if (isFirstMove) {
+        // Handle first move
+        final response = await _model.generateContent([
+          Content.multi([
+            TextPart(_constructInitialBoardPrompt()),
+            DataPart('image/jpeg', currentImageBytes),
+          ]),
+        ]);
+
+        if (response.text == null) {
+          throw Exception('Empty response from Gemini');
+        }
+
         return {
           'status': 'success',
           'type': 'initial',
-          'board': jsonData['board'],
-          'letters': List<Map<String, dynamic>>.from(jsonData['letters']),
+          'data': _parseGeminiResponse(response.text!, true),
+          'imagePath': currentImagePath,
+        };
+      } else {
+        // Get previous image
+        final lastMove = await _firebaseService.getLastMove(sessionId);
+        if (lastMove == null || lastMove.imagePath == null) {
+          throw Exception('Previous move image not found');
+        }
+
+        // Download previous image
+        final prevImageRef = _storage.ref().child(lastMove.imagePath!);
+        final prevImageBytes = await prevImageRef.getData();
+
+        if (prevImageBytes == null) {
+          throw Exception('Failed to download previous image');
+        }
+
+        // Compare images using Gemini
+        final response = await _model.generateContent([
+          Content.multi([
+            TextPart(_constructImageComparisonPrompt(boardState)),
+            DataPart('image/jpeg', prevImageBytes),
+            DataPart('image/jpeg', currentImageBytes),
+          ]),
+        ]);
+
+        if (response.text == null) {
+          throw Exception('Empty response from Gemini');
+        }
+
+        return {
+          'status': 'success',
+          'type': 'move',
+          'data': _parseGeminiResponse(response.text!, false),
+          'imagePath': currentImagePath,
         };
       }
-
-      return {
-        'status': 'success',
-        'type': 'move',
-        'word': jsonData['word'],
-        'score': jsonData['score'],
-        'letters': List<Map<String, dynamic>>.from(jsonData['letters']),
-      };
     } catch (e) {
-      return {'status': 'error', 'message': 'Invalid response format'};
+      print('Error in analyzeBoardImage: $e');
+      return {
+        'status': 'error',
+        'message': e.toString(),
+      };
     }
   }
+
+  String _constructInitialBoardPrompt() {
+    return '''
+You are analyzing an initial Scrabble board image. Identify all visible letters and their positions.
+
+Return ONLY a JSON object in exactly this format:
+{
+  "board": [
+    {
+      "letter": "A",
+      "row": 7,
+      "col": 7,
+      "points": 1
+    }
+  ]
 }
-```\n
+
+Rules:
+- Use 0-based indices (0-14) for rows and columns
+- Include ONLY placed letters, ignore empty squares
+- All coordinates must be within the 15x15 grid
+- Return ONLY the JSON, no explanatory text
+''';
+  }
+
+  String _constructImageComparisonPrompt(Map<String, dynamic> previousState) {
+    return '''
+Compare these two Scrabble board images: the first is the previous state, the second is the current state.
+Identify ONLY the letters that appear in the second image but not in the first.
+
+Previous board state for reference:
+${jsonEncode(previousState)}
+
+Return ONLY a JSON object in exactly this format:
+{
+  "word": "EXAMPLE",
+  "score": 15,
+  "newLetters": [
+    {
+      "letter": "A",
+      "row": 7,
+      "col": 7,
+      "points": 1
+    }
+  ]
+}
+
+Rules:
+- Compare the images to find ONLY new letters
+- Calculate score including board multipliers
+- Return ONLY the JSON, no explanatory text
+- Use 0-based indices (0-14) for coordinates
+''';
+  }
+
+  Map<String, dynamic> _parseGeminiResponse(String response, bool isFirstMove) {
+    try {
+      String cleanJson = response
+          .replaceAll(RegExp(r'```json\n?'), '')
+          .replaceAll(RegExp(r'```\n?'), '')
+          .trim();
+
+      return jsonDecode(cleanJson);
+    } catch (e) {
+      throw Exception('Invalid response format: $e');
+    }
+  }
+}```\n
 \n### src/services/qr_service.dart\n
 ```dart
 // lib/src/services/qr_service.dart
@@ -2280,15 +2455,19 @@ dependencies:
   intl: ^0.18.1
   permission_handler: ^11.3.1
   flutter_dotenv: ^5.2.1
+  firebase_storage: ^11.6.5
+  json_annotation: ^4.9.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  json_serializable: ^6.9.0
+  build_runner: ^2.4.13
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
     - assets/icons/
-```
+    - .env```

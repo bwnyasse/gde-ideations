@@ -61,7 +61,6 @@ class FirebaseService {
     });
   }
 
-
 // Get real-time board state updates
   Stream<Map<String, dynamic>> getBoardState(String sessionId) {
     return _firestore
@@ -264,53 +263,82 @@ class FirebaseService {
   }
 
   // Update the board state with new tiles
-Future<void> updateBoardState(String sessionId, List<Map<String, dynamic>> tiles) async {
-  final batch = _firestore.batch();
-  final boardRef = _firestore
-      .collection('game_sessions')
-      .doc(sessionId)
-      .collection('board_state')
-      .doc('current');
+  Future<void> updateBoardState(
+      String sessionId, List<Map<String, dynamic>> tiles) async {
+    final batch = _firestore.batch();
+    final boardRef = _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .collection('board_state')
+        .doc('current');
 
-  // Get current board state
-  final currentState = await boardRef.get();
-  Map<String, dynamic> currentData = currentState.data() ?? {};
+    // Get current board state
+    final currentState = await boardRef.get();
+    Map<String, dynamic> currentData = currentState.data() ?? {};
 
-  // Update with new tiles
-  for (var tile in tiles) {
-    String key = '${tile['row']}-${tile['col']}';
-    currentData[key] = {
-      'letter': tile['letter'],
-      'points': tile['points'],
-      'playerId': tile['playerId'],
-    };
+    // Update with new tiles
+    for (var tile in tiles) {
+      String key = '${tile['row']}-${tile['col']}';
+      currentData[key] = {
+        'letter': tile['letter'],
+        'points': tile['points'],
+        'playerId': tile['playerId'],
+      };
+    }
+
+    batch.set(boardRef, currentData, SetOptions(merge: true));
+    await batch.commit();
   }
 
-  batch.set(boardRef, currentData, SetOptions(merge: true));
-  await batch.commit();
-}
-
 // Update the session with the last move's image path
-Future<void> updateSessionImage(String sessionId, String imagePath) async {
-  await _firestore.collection('game_sessions').doc(sessionId).update({
-    'lastMoveImage': imagePath,
-  });
-}
+  Future<void> updateSessionImage(String sessionId, String imagePath) async {
+    await _firestore.collection('game_sessions').doc(sessionId).update({
+      'lastMoveImage': imagePath,
+    });
+  }
 
-// You should also update your _parseSessionDoc method to include lastMoveImagePath:
-GameSession _parseSessionDoc(DocumentSnapshot doc) {
-  final data = doc.data() as Map<String, dynamic>;
-  final timestamp = data['startTime'] as Timestamp;
+  GameSession _parseSessionDoc(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final timestamp = data['startTime'] as Timestamp;
 
-  return GameSession(
-    id: doc.id,
-    player1Name: data['player1Name'],
-    player2Name: data['player2Name'],
-    startTime: timestamp.toDate(),
-    qrCode: data['qrCode'],
-    isActive: data['isActive'] ?? false,
-    currentPlayerId: data['currentPlayerId'] ?? 'p1',
-    lastMoveImagePath: data['lastMoveImage'], // Add this field
-  );
-}
+    // Get moves from the document if they exist
+    List<Move> moves = [];
+    if (data['moves'] != null) {
+      moves = (data['moves'] as List)
+          .map((moveData) => Move.fromJson(moveData))
+          .toList();
+    }
+
+    return GameSession(
+      id: doc.id,
+      player1Name: data['player1Name'],
+      player2Name: data['player2Name'],
+      startTime: timestamp.toDate(),
+      qrCode: data['qrCode'],
+      isActive: data['isActive'] ?? false,
+      currentPlayerId: data['currentPlayerId'] ?? 'p1',
+      moves: moves,
+    );
+  }
+
+  Future<Move?> getLastMove(String sessionId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('moves')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        return null;
+      }
+
+      return Move.fromJson(querySnapshot.docs.first.data());
+    } catch (e) {
+      print('Error getting last move: $e');
+      return null;
+    }
+  }
 }

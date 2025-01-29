@@ -1,3 +1,4 @@
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_moderator_app/src/screens/game_sessions_list_screen.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Initialize Firebase Storage
+  FirebaseStorage.instance.setMaxUploadRetryTime(const Duration(seconds: 3));
+
   runApp(const ModeratorApp());
 }
 

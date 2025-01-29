@@ -1,8 +1,7 @@
-// lib/src/providers/game_session_provider.dart
 import 'package:flutter/foundation.dart';
-import 'package:oloodi_scrabble_moderator_app/src/models/game_session.dart';
-import 'package:oloodi_scrabble_moderator_app/src/services/firebase_service.dart';
-import 'package:oloodi_scrabble_moderator_app/src/services/qr_service.dart';
+import '../models/game_session.dart';
+import '../services/firebase_service.dart';
+import '../services/qr_service.dart';
 
 class GameSessionProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
@@ -16,8 +15,7 @@ class GameSessionProvider with ChangeNotifier {
   GameSession? get currentSession => _currentSession;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get hasActiveSession =>
-      _currentSession != null && _currentSession!.isActive;
+  bool get hasActiveSession => _currentSession != null && _currentSession!.isActive;
 
   // Create new game session
   Future<void> createGameSession(String player1Name, String player2Name) async {
@@ -43,28 +41,6 @@ class GameSessionProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _setError('Failed to create game session: $e');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  // End current session
-  Future<void> endCurrentSession() async {
-    if (_currentSession == null) return;
-
-    try {
-      _setLoading(true);
-      _clearError();
-
-      await _firebaseService.updateSessionStatus(
-        _currentSession!.id,
-        false,
-      );
-
-      _currentSession = null;
-      notifyListeners();
-    } catch (e) {
-      _setError('Failed to end session: $e');
     } finally {
       _setLoading(false);
     }
@@ -102,6 +78,27 @@ class GameSessionProvider with ChangeNotifier {
     }
   }
 
+  // Update board state
+  Future<void> updateBoardState(
+    String sessionId,
+    List<Map<String, dynamic>> tiles,
+  ) async {
+    try {
+      _setLoading(true);
+      _clearError();
+
+      // Update in Firebase using tiles directly
+      await _firebaseService.updateBoardState(sessionId, tiles);
+
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to update board state: $e');
+      throw e;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   // Load existing session
   Future<void> loadSession(String sessionId) async {
     try {
@@ -117,25 +114,32 @@ class GameSessionProvider with ChangeNotifier {
     }
   }
 
-  // Helper methods
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
+  // End current session
+  Future<void> endCurrentSession() async {
+    if (_currentSession == null) return;
+
+    try {
+      _setLoading(true);
+      _clearError();
+
+      await _firebaseService.updateSessionStatus(
+        _currentSession!.id,
+        false,
+      );
+
+      _currentSession = null;
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to end session: $e');
+    } finally {
+      _setLoading(false);
+    }
   }
 
-  void _setError(String error) {
-    _error = error;
-    notifyListeners();
-  }
-
-  void _clearError() {
-    _error = null;
-  }
-
-  // Get stream of all sessions
+  // Get all sessions
   Stream<List<GameSession>> getSessions() {
     return _firebaseService.getGameSessions().map((snapshot) => snapshot.docs
-        .map((doc) => GameSession.fromMap(doc.data() as Map<String, dynamic>))
+        .map((doc) => GameSession.fromJson(doc.data() as Map<String, dynamic>))
         .toList());
   }
 
@@ -160,8 +164,7 @@ class GameSessionProvider with ChangeNotifier {
   Future<Map<String, dynamic>> getSessionStats(String sessionId) async {
     try {
       final moves = await _firebaseService.getSessionMoves(sessionId).first;
-      final remainingLetters =
-          await _firebaseService.getRemainingLetters(sessionId);
+      final remainingLetters = await _firebaseService.getRemainingLetters(sessionId);
 
       return {
         'totalMoves': moves.length,
@@ -177,5 +180,20 @@ class GameSessionProvider with ChangeNotifier {
       _setError('Failed to get session stats: $e');
       rethrow;
     }
+  }
+
+  // Helper methods
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+
+  void _setError(String error) {
+    _error = error;
+    notifyListeners();
+  }
+
+  void _clearError() {
+    _error = null;
   }
 }

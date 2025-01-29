@@ -45,10 +45,10 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
 
   Future<void> _requestCameraPermission() async {
     var status = await Permission.camera.request();
-    if (status.isGranted) {
-      _initializeCamera();
-    } else {
-      if (mounted) {
+    if (mounted) {
+      if (status.isGranted) {
+        _initializeCamera();
+      } else {
         setState(() {
           _error = status.isPermanentlyDenied
               ? 'Camera permission permanently denied. Please enable it in settings.'
@@ -87,27 +87,42 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   }
 
   Future<void> _captureAndAnalyze() async {
-    if (_processing || _controller == null || !_controller!.value.isInitialized) {
+    if (_processing ||
+        _controller == null ||
+        !_controller!.value.isInitialized) {
       return;
     }
 
     setState(() => _processing = true);
 
     try {
-      // Show processing indicator
+      // Show initial processing status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Processing image...')),
+          const SnackBar(
+            content: Text('Capturing image...'),
+            duration: Duration(seconds: 1),
+          ),
         );
       }
 
       // Capture image
       final image = await _controller!.takePicture();
 
+      // Update status
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Uploading and analyzing image...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
       // Get current session details
       final gameState = context.read<GameSessionProvider>();
       final session = gameState.currentSession;
-      
+
       if (session == null) {
         throw Exception('No active game session');
       }
@@ -120,13 +135,14 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
 
       if (!mounted) return;
 
-      // Close the processing snackbar
+      // Close any existing snackbars
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (analysis['status'] == 'success') {
         List<Map<String, dynamic>> tiles = [];
         String word = '';
         int score = 0;
+        String? imagePath = analysis['imagePath'];
 
         print('Analysis response: $analysis'); // Debug log
 
@@ -140,11 +156,14 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-              
+
           word = tiles.map((t) => t['letter']).join();
           score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
+
+          // Update board state first
+          await gameState.updateBoardState(session.id, tiles);
         } else {
-          // Parse delta changes - using newLetters instead of tiles
+          // Parse delta changes for subsequent moves
           tiles = (analysis['data']['newLetters'] as List)
               .map((tile) => {
                     'letter': tile['letter'],
@@ -153,7 +172,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-          
+
           word = analysis['data']['word'] as String;
           score = analysis['data']['score'] as int;
         }
@@ -162,16 +181,35 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         final confirmed = await _showMoveConfirmation(word, score, tiles);
 
         if (confirmed == true && mounted) {
-          // Add move to session
-          await gameState.addMove(
-            word: word,
-            score: score,
-            playerId: session.currentPlayerId,
-            tiles: tiles,
-          );
+          try {
+            // Show saving status
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Saving move...'),
+                duration: Duration(seconds: 1),
+              ),
+            );
 
-          if (mounted) {
-            Navigator.pop(context);
+            // Add move to session
+            await gameState.addMove(
+              word: word,
+              score: score,
+              playerId: session.currentPlayerId,
+              tiles: tiles,
+            );
+
+            if (mounted) {
+              Navigator.pop(context);
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error saving move: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           }
         }
       } else {
@@ -183,6 +221,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
           SnackBar(
             content: Text('Error: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -282,14 +321,10 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     if (!_isCameraInitialized || _controller == null) {
       return const Center(child: CircularProgressIndicator());
     }
-
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Camera Preview
         CameraPreview(_controller!),
-
-        // Processing Indicator
         if (_processing)
           Container(
             color: Colors.black54,
@@ -297,8 +332,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
               child: CircularProgressIndicator(color: Colors.white),
             ),
           ),
-
-        // Capture Button
         Positioned(
           bottom: 32,
           left: 0,
@@ -319,8 +352,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             ),
           ),
         ),
-
-        // Instructions
         Positioned(
           bottom: 0,
           left: 0,

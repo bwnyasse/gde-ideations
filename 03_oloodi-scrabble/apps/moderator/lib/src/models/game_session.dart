@@ -1,16 +1,47 @@
-// lib/src/models/game_session.dart
+// move.dart
+import 'package:json_annotation/json_annotation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+part 'game_session.g.dart';
+
+@JsonSerializable()
+class Move {
+  final String word;
+  final int score;
+  final List<Map<String, dynamic>> tiles;
+  final String playerId;
+  @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
+  final DateTime timestamp;
+  final String? imagePath;
+
+  Move({
+    required this.word,
+    required this.score,
+    required this.tiles,
+    required this.playerId,
+    required this.timestamp,
+    this.imagePath,
+  });
+
+  factory Move.fromJson(Map<String, dynamic> json) => _$MoveFromJson(json);
+  Map<String, dynamic> toJson() => _$MoveToJson(this);
+
+  static DateTime _timestampFromJson(Timestamp timestamp) => timestamp.toDate();
+  static Timestamp _timestampToJson(DateTime date) => Timestamp.fromDate(date);
+}
+
+@JsonSerializable()
 class GameSession {
   final String id;
   final String player1Name;
   final String player2Name;
+  @JsonKey(fromJson: _timestampFromJson, toJson: _timestampToJson)
   final DateTime startTime;
   final String? qrCode;
   final String currentPlayerId;
-  final String? lastMoveImagePath;
-  final List<Map<String, dynamic>> moves; // Added moves list
-  bool isActive;
+  @JsonKey(defaultValue: [])
+  final List<Move> moves;
+  final bool isActive;
 
   GameSession({
     required this.id,
@@ -19,48 +50,17 @@ class GameSession {
     required this.startTime,
     this.qrCode,
     this.currentPlayerId = 'p1',
-    this.lastMoveImagePath,
-    this.moves = const [], // Initialize with empty list by default
+    this.moves = const [],
     this.isActive = true,
   });
 
-  // Update the fromMap factory constructor
-  factory GameSession.fromMap(Map<String, dynamic> data) {
-    // Convert moves data if it exists
-    List<Map<String, dynamic>> movesList = [];
-    if (data['moves'] != null) {
-      movesList = List<Map<String, dynamic>>.from(data['moves']);
-    }
+  factory GameSession.fromJson(Map<String, dynamic> json) =>
+      _$GameSessionFromJson(json);
+  Map<String, dynamic> toJson() => _$GameSessionToJson(this);
 
-    return GameSession(
-      id: data['id'],
-      player1Name: data['player1Name'],
-      player2Name: data['player2Name'],
-      startTime: (data['startTime'] as Timestamp).toDate(),
-      qrCode: data['qrCode'],
-      currentPlayerId: data['currentPlayerId'] ?? 'p1',
-      lastMoveImagePath: data['lastMoveImage'],
-      moves: movesList, // Add moves to constructor
-      isActive: data['isActive'] ?? true,
-    );
-  }
+  static DateTime _timestampFromJson(Timestamp timestamp) => timestamp.toDate();
+  static Timestamp _timestampToJson(DateTime date) => Timestamp.fromDate(date);
 
-  // Update the toMap method
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'player1Name': player1Name,
-      'player2Name': player2Name,
-      'startTime': startTime,
-      'qrCode': qrCode,
-      'currentPlayerId': currentPlayerId,
-      'lastMoveImage': lastMoveImagePath,
-      'moves': moves, // Include moves in the map
-      'isActive': isActive,
-    };
-  }
-
-  String getNextPlayerId() {
-    return currentPlayerId == 'p1' ? 'p2' : 'p1';
-  }
+  String getNextPlayerId() => currentPlayerId == 'p1' ? 'p2' : 'p1';
+  Move? get lastMove => moves.isNotEmpty ? moves.last : null;
 }
