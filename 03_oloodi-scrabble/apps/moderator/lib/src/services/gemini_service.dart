@@ -24,24 +24,16 @@ class GeminiService {
     );
   }
 
-Future<String> _uploadImageToStorage(String sessionId, String imagePath) async {
+  Future<String> _uploadImageToStorage(
+      String sessionId, String imagePath, int moveNumber) async {
     try {
       final File imageFile = File(imagePath);
       if (!await imageFile.exists()) {
         throw Exception('Image file not found at $imagePath');
       }
 
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'moves/${sessionId}_current.jpg';  // Use fixed name for current move
+      final fileName = 'moves/${sessionId}/${moveNumber}.jpg';
       final ref = _storage.ref().child(fileName);
-      
-      // Delete existing file if it exists
-      try {
-        await ref.delete();
-      } catch (e) {
-        // Ignore error if file doesn't exist
-        print('No existing file to delete');
-      }
 
       // Create upload task
       final uploadTask = ref.putFile(
@@ -50,23 +42,21 @@ Future<String> _uploadImageToStorage(String sessionId, String imagePath) async {
           contentType: 'image/jpeg',
           customMetadata: {
             'sessionId': sessionId,
-            'timestamp': timestamp.toString(),
+            'moveNumber': moveNumber.toString(),
           },
         ),
       );
 
       // Monitor upload progress
       uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        print('Upload progress: ${snapshot.bytesTransferred}/${snapshot.totalBytes}');
+        print(
+            'Upload progress: ${snapshot.bytesTransferred}/${snapshot.totalBytes}');
       });
 
       // Wait for upload to complete
       await uploadTask;
-      
-      // Get download URL (optional)
-      final downloadUrl = await ref.getDownloadURL();
-      print('Image uploaded successfully. Download URL: $downloadUrl');
 
+      print('Image uploaded successfully to $fileName');
       return fileName;
     } catch (e) {
       print('Error uploading image: $e');
@@ -79,13 +69,20 @@ Future<String> _uploadImageToStorage(String sessionId, String imagePath) async {
     String imagePath,
   ) async {
     try {
-      // Get previous board state and last image
+      // Get current move number based on existing moves
+      final moveCount = await _firebaseService.getMoveCount(sessionId);
+      final currentMoveNumber = moveCount + 1;
+
+      // Get previous board state
       final boardState = await _firebaseService.getBoardState(sessionId).first;
       final isFirstMove = boardState.isEmpty;
 
-      // Upload current image to Firebase Storage
-      final currentImagePath =
-          await _uploadImageToStorage(sessionId, imagePath);
+      // Upload current image with sequential naming
+      final currentImagePath = await _uploadImageToStorage(
+        sessionId,
+        imagePath,
+        currentMoveNumber,
+      );
 
       // Read current image bytes
       final currentImageBytes = await File(imagePath).readAsBytes();
@@ -108,20 +105,17 @@ Future<String> _uploadImageToStorage(String sessionId, String imagePath) async {
           'type': 'initial',
           'data': _parseGeminiResponse(response.text!, true),
           'imagePath': currentImagePath,
+          'moveNumber': currentMoveNumber,
         };
       } else {
         // Get previous image
-        final lastMove = await _firebaseService.getLastMove(sessionId);
-        if (lastMove == null || lastMove.imagePath == null) {
-          throw Exception('Previous move image not found');
-        }
+        final previousMoveNumber = currentMoveNumber - 1;
+        final previousImageRef =
+            _storage.ref().child('moves/$sessionId/$previousMoveNumber.jpg');
 
-        // Download previous image
-        final prevImageRef = _storage.ref().child(lastMove.imagePath!);
-        final prevImageBytes = await prevImageRef.getData();
-
+        final prevImageBytes = await previousImageRef.getData();
         if (prevImageBytes == null) {
-          throw Exception('Failed to download previous image');
+          throw Exception('Previous move image not found');
         }
 
         // Compare images using Gemini
@@ -142,6 +136,7 @@ Future<String> _uploadImageToStorage(String sessionId, String imagePath) async {
           'type': 'move',
           'data': _parseGeminiResponse(response.text!, false),
           'imagePath': currentImagePath,
+          'moveNumber': currentMoveNumber,
         };
       }
     } catch (e) {

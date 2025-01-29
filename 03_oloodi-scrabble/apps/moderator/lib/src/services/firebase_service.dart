@@ -373,4 +373,15 @@ class FirebaseService {
         .doc(sessionId)
         .update({'currentPlayerId': playerId});
   }
+
+    Future<int> getMoveCount(String sessionId) async {
+    final movesSnapshot = await _firestore
+        .collection('game_sessions')
+        .doc(sessionId)
+        .collection('moves')
+        .count()
+        .get();
+    
+    return movesSnapshot.count ?? 0;
+  }
 }
