@@ -4,7 +4,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
 import '../services/gemini_service.dart';
-import '../services/firebase_service.dart';
 
 class MoveCaptureScreen extends StatefulWidget {
   const MoveCaptureScreen({super.key});
@@ -20,7 +19,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   String? _error;
   bool _processing = false;
   final GeminiService _geminiService = GeminiService();
-  final FirebaseService _firebaseService = FirebaseService();
 
   @override
   void initState() {
@@ -38,39 +36,23 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? cameraController = _controller;
-
-    if (cameraController == null || !cameraController.value.isInitialized) {
-      return;
-    }
-
     if (state == AppLifecycleState.inactive) {
-      cameraController.dispose();
+      _controller?.dispose();
     } else if (state == AppLifecycleState.resumed) {
       _initializeCamera();
     }
   }
 
   Future<void> _requestCameraPermission() async {
-    var status = await Permission.camera.status;
+    var status = await Permission.camera.request();
     if (status.isGranted) {
       _initializeCamera();
-      return;
-    }
-
-    status = await Permission.camera.request();
-    if (status.isGranted) {
-      _initializeCamera();
-    } else if (status.isPermanentlyDenied) {
-      if (mounted) {
-        setState(() {
-          _error = 'Camera permission was permanently denied. Please enable it in app settings.';
-        });
-      }
     } else {
       if (mounted) {
         setState(() {
-          _error = 'Camera permission is required to capture moves.';
+          _error = status.isPermanentlyDenied
+              ? 'Camera permission permanently denied. Please enable it in settings.'
+              : 'Camera permission is required to capture moves.';
         });
       }
     }
@@ -113,9 +95,11 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
 
     try {
       // Show processing indicator
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Processing image...')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Processing image...')),
+        );
+      }
 
       // Capture image
       final image = await _controller!.takePicture();
@@ -128,9 +112,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         throw Exception('No active game session');
       }
 
-      // Determine if it's the first move and get previous image path
-      final isFirstMove = session.moves.isEmpty;
-      
       // Analyze with Gemini
       final analysis = await _geminiService.analyzeBoardImage(
         session.id,
@@ -147,7 +128,9 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         String word = '';
         int score = 0;
 
-        if (isFirstMove) {
+        print('Analysis response: $analysis'); // Debug log
+
+        if (analysis['type'] == 'initial') {
           // Parse initial board setup
           tiles = (analysis['data']['board'] as List)
               .map((tile) => {
@@ -158,12 +141,11 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   })
               .toList();
               
-          // For first move, we might not have a word/score
           word = tiles.map((t) => t['letter']).join();
           score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
         } else {
-          // Parse delta changes
-          tiles = (analysis['data']['tiles'] as List)
+          // Parse delta changes - using newLetters instead of tiles
+          tiles = (analysis['data']['newLetters'] as List)
               .map((tile) => {
                     'letter': tile['letter'],
                     'row': tile['row'],
@@ -172,17 +154,14 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   })
               .toList();
           
-          word = analysis['data']['word'];
-          score = analysis['data']['score'];
+          word = analysis['data']['word'] as String;
+          score = analysis['data']['score'] as int;
         }
 
         // Show confirmation dialog
         final confirmed = await _showMoveConfirmation(word, score, tiles);
 
         if (confirmed == true && mounted) {
-          // Update Firestore with new tiles
-          await _firebaseService.updateBoardState(session.id, tiles);
-
           // Add move to session
           await gameState.addMove(
             word: word,
@@ -190,9 +169,6 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             playerId: session.currentPlayerId,
             tiles: tiles,
           );
-
-          // Update session with current image path
-          await _firebaseService.updateSessionImage(session.id, image.path);
 
           if (mounted) {
             Navigator.pop(context);
