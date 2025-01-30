@@ -203,28 +203,6 @@ class FirebaseService {
     );
   }
 
-  Future<String?> getLastMoveImage(String sessionId) async {
-    return FirebaseErrorHandler.wrap(
-      operation: 'get_last_move_image',
-      action: () async {
-        final querySnapshot = await _firestore
-            .collection('game_sessions')
-            .doc(sessionId)
-            .collection('moves')
-            .orderBy('timestamp', descending: true)
-            .limit(1)
-            .get();
-
-        if (querySnapshot.docs.isEmpty) {
-          return null;
-        }
-
-        final moveData = querySnapshot.docs.first.data();
-        return moveData['imagePath'] as String?;
-      },
-    );
-  }
-
   Future<void> addMoveToSession({
     required String sessionId,
     required String word,
@@ -341,17 +319,6 @@ class FirebaseService {
 
         batch.set(boardRef, currentData, SetOptions(merge: true));
         await batch.commit();
-      },
-    );
-  }
-
-  Future<void> updateSessionImage(String sessionId, String imagePath) async {
-    return FirebaseErrorHandler.wrap(
-      operation: 'update_session_image',
-      action: () async {
-        await _firestore.collection('game_sessions').doc(sessionId).update({
-          'lastMoveImage': imagePath,
-        });
       },
     );
   }
