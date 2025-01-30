@@ -5,7 +5,10 @@ import '../models/player.dart';
 import 'package:flutter/material.dart';
 
 class FirebaseService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
+    app: FirebaseFirestore.instance.app,
+    databaseId: "scrabble",
+  );
   String? _gameId;
 
   // Get active game sessions
@@ -45,11 +48,9 @@ class FirebaseService {
 
   // Get players for a specific game
   Future<List<Player>> getPlayers(String gameId) async {
-    final gameDoc = await _firestore
-        .collection('game_sessions')
-        .doc(gameId)
-        .get();
-        
+    final gameDoc =
+        await _firestore.collection('game_sessions').doc(gameId).get();
+
     if (!gameDoc.exists) {
       throw Exception('Game not found');
     }
@@ -90,7 +91,7 @@ class FirebaseService {
           .doc(gameId)
           .collection('moves')
           .get();
-      
+
       final moves = movesSnapshot.docs;
       final remainingLetters = 100 - moves.length * 7; // Approximate
 
@@ -118,8 +119,8 @@ class FirebaseService {
         .collection('moves')
         .where('playerId', isEqualTo: playerId)
         .snapshots()
-        .map((snapshot) => snapshot.docs.fold(
-            0, (sum, doc) => sum + (doc.data()['score'] as int? ?? 0)));
+        .map((snapshot) => snapshot.docs
+            .fold(0, (sum, doc) => sum + (doc.data()['score'] as int? ?? 0)));
   }
 
   // Get remaining letters
@@ -141,10 +142,7 @@ class FirebaseService {
 
   // Get game session by ID
   Future<GameSession?> getSession(String gameId) async {
-    final doc = await _firestore
-        .collection('game_sessions')
-        .doc(gameId)
-        .get();
+    final doc = await _firestore.collection('game_sessions').doc(gameId).get();
 
     if (!doc.exists) {
       return null;
