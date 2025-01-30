@@ -29,7 +29,7 @@ class ModeratorApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => GameSessionProvider()),
       ],
       child: MaterialApp(
-        title: 'Scrabble Moderator',
+        title: 'Oloodi Scrabble Moderator',
         theme: AppTheme.theme,
         home: const GameSessionsListScreen(),
       ),
