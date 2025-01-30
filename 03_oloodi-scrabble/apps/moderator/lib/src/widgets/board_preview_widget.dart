@@ -1,6 +1,9 @@
 // lib/src/widgets/board_preview_widget.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config/board_config.dart';
+import '../models/board_square.dart';
 import '../providers/game_session_provider.dart';
 import '../services/firebase_service.dart';
 
@@ -47,15 +50,16 @@ class BoardPreviewWidget extends StatelessWidget {
 
   Widget _buildSquare(BuildContext context, Map<String, dynamic> boardState, int row, int col) {
     final squareData = boardState['$row-$col'] as Map<String, dynamic>?;
+    final squareType = BoardConfig.getSquareType(row, col);
 
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.black12),
-        color: _getSquareColor(squareData?['type'] ?? 'normal'),
+        color: BoardConfig.getSquareColor(squareType),
       ),
       child: squareData?['letter'] != null
           ? _buildTile(context, squareData!)
-          : _buildSquareContent(squareData?['type'] ?? 'normal'),
+          : _buildSquareLabel(squareType),
     );
   }
 
@@ -101,27 +105,9 @@ class BoardPreviewWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildSquareContent(String type) {
-    String label = '';
-    switch (type) {
-      case 'tripleWord':
-        label = 'TW';
-        break;
-      case 'doubleWord':
-        label = 'DW';
-        break;
-      case 'tripleLetter':
-        label = 'TL';
-        break;
-      case 'doubleLetter':
-        label = 'DL';
-        break;
-      case 'center':
-        label = '★';
-        break;
-      default:
-        return const SizedBox();
-    }
+  Widget _buildSquareLabel(SquareType type) {
+    final label = BoardConfig.getSquareLabel(type);
+    if (label.isEmpty) return const SizedBox();
 
     return Center(
       child: Text(
@@ -133,22 +119,5 @@ class BoardPreviewWidget extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Color _getSquareColor(String type) {
-    switch (type) {
-      case 'tripleWord':
-        return Colors.red[100]!;
-      case 'doubleWord':
-        return Colors.pink[50]!;
-      case 'tripleLetter':
-        return Colors.blue[100]!;
-      case 'doubleLetter':
-        return Colors.lightBlue[50]!;
-      case 'center':
-        return Colors.pink[50]!;
-      default:
-        return Colors.white;
-    }
   }
 }

@@ -158,6 +158,117 @@ class EnvConfig {
     return missing;
   }
 }```\n
+\n### src/config/board_config.dart\n
+```dart
+// lib/src/config/board_config.dart
+
+import 'package:flutter/material.dart';
+import '../models/board_square.dart';
+
+class BoardConfig {
+  // Board dimensions
+  static const int boardSize = 15;
+  static const int centerSquare = 7;
+
+  // Premium square colors
+  static const Map<SquareType, Color> squareColors = {
+    SquareType.normal: Colors.white,
+    SquareType.tripleWord: Color(0xFFFFCDD2),    // Light red
+    SquareType.doubleWord: Color(0xFFF8BBD0),    // Light pink
+    SquareType.tripleLetter: Color(0xFFBBDEFB),  // Light blue
+    SquareType.doubleLetter: Color(0xFFE1F5FE),  // Lighter blue
+    SquareType.center: Color(0xFFF8BBD0),        // Same as double word
+  };
+
+  // Premium square locations
+  static final Map<String, SquareType> _premiumSquares = _initializePremiumSquares();
+
+  static Map<String, SquareType> _initializePremiumSquares() {
+    final Map<String, SquareType> squares = {};
+
+    // Triple Word Score squares
+    for (var pos in [
+      [0, 0], [0, 7], [0, 14],
+      [7, 0], [7, 14],
+      [14, 0], [14, 7], [14, 14]
+    ]) {
+      squares['${pos[0]}-${pos[1]}'] = SquareType.tripleWord;
+    }
+
+    // Double Word Score squares
+    for (var i = 1; i <= 5; i++) {
+      squares['$i-$i'] = SquareType.doubleWord;           // Diagonal from top-left
+      squares['$i-${14 - i}'] = SquareType.doubleWord;    // Diagonal from top-right
+      squares['${14 - i}-$i'] = SquareType.doubleWord;    // Diagonal from bottom-left
+      squares['${14 - i}-${14 - i}'] = SquareType.doubleWord; // Diagonal from bottom-right
+    }
+
+    // Triple Letter Score squares
+    for (var pos in [
+      [1, 5], [1, 9], [5, 1], [5, 5], [5, 9], [5, 13],
+      [9, 1], [9, 5], [9, 9], [9, 13], [13, 5], [13, 9]
+    ]) {
+      squares['${pos[0]}-${pos[1]}'] = SquareType.tripleLetter;
+    }
+
+    // Double Letter Score squares
+    for (var pos in [
+      [3, 0], [3, 7], [3, 14],
+      [6, 2], [6, 6], [6, 8], [6, 12],
+      [7, 3], [7, 11],
+      [8, 2], [8, 6], [8, 8], [8, 12],
+      [11, 0], [11, 7], [11, 14]
+    ]) {
+      squares['${pos[0]}-${pos[1]}'] = SquareType.doubleLetter;
+    }
+
+    // Center square
+    squares['$centerSquare-$centerSquare'] = SquareType.center;
+
+    return squares;
+  }
+
+  // Get square type for a given position
+  static SquareType getSquareType(int row, int col) {
+    if (row < 0 || row >= boardSize || col < 0 || col >= boardSize) {
+      throw RangeError('Board position out of bounds');
+    }
+    return _premiumSquares['$row-$col'] ?? SquareType.normal;
+  }
+
+  // Get color for a square type
+  static Color getSquareColor(SquareType type) {
+    return squareColors[type] ?? Colors.white;
+  }
+
+  // Get color for a position
+  static Color getColorForPosition(int row, int col) {
+    return getSquareColor(getSquareType(row, col));
+  }
+
+  // Helper method to check if position is center square
+  static bool isCenterSquare(int row, int col) {
+    return row == centerSquare && col == centerSquare;
+  }
+
+  // Get display text for premium squares
+  static String getSquareLabel(SquareType type) {
+    switch (type) {
+      case SquareType.tripleWord:
+        return 'TW';
+      case SquareType.doubleWord:
+        return 'DW';
+      case SquareType.tripleLetter:
+        return 'TL';
+      case SquareType.doubleLetter:
+        return 'DL';
+      case SquareType.center:
+        return '★';
+      default:
+        return '';
+    }
+  }
+}```\n
 \n### src/providers/game_session_provider.dart\n
 ```dart
 import 'package:flutter/foundation.dart';
@@ -1961,10 +2072,95 @@ class RecognitionMetricsService {
     }
   }
 }```\n
+\n### src/services/firebase_error_handler.dart\n
+```dart
+// lib/src/services/firebase_error_handler.dart
+
+import 'dart:async';
+import 'dart:io';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class FirebaseErrorHandler {
+  // Custom exception for Firebase operations
+  static Exception handleError(Object error, String operation) {
+    if (error is FirebaseException) {
+      switch (error.code) {
+        case 'permission-denied':
+          return Exception(
+              'Access denied: Insufficient permissions for $operation');
+        case 'not-found':
+          return Exception('Resource not found for $operation');
+        case 'already-exists':
+          return Exception('Resource already exists for $operation');
+        case 'cancelled':
+          return Exception('Operation cancelled: $operation');
+        case 'deadline-exceeded':
+          return Exception('Operation timed out: $operation');
+        case 'unavailable':
+          return Exception('Service unavailable. Please try again later');
+        case 'unauthenticated':
+          return Exception('Authentication required for $operation');
+        case 'internal':
+          return Exception('Internal error occurred. Please try again');
+        default:
+          return Exception(
+              'Firebase error during $operation: ${error.message}');
+      }
+    }
+
+    // Handle network errors
+    if (error is SocketException || error is TimeoutException) {
+      return Exception(
+          'Network error during $operation. Please check your connection.');
+    }
+
+    // Handle format errors
+    if (error is FormatException) {
+      return Exception('Data format error during $operation');
+    }
+
+    // Default error handling
+    return Exception('Error during $operation: $error');
+  }
+
+  // Wrapper function for Firebase operations
+  static Future<T> wrap<T>({
+    required String operation,
+    required Future<T> Function() action,
+    T Function(Exception error)? errorHandler,
+  }) async {
+    try {
+      return await action();
+    } catch (error) {
+      final exception = handleError(error, operation);
+
+      // Log error for debugging
+      print('Firebase Error in $operation: $error');
+
+      // Use custom error handler if provided, otherwise throw
+      if (errorHandler != null) {
+        return errorHandler(exception as Exception);
+      }
+      throw exception;
+    }
+  }
+
+  // Wrapper for Firebase streams
+  static Stream<T> wrapStream<T>({
+    required String operation,
+    required Stream<T> Function() streamAction,
+  }) {
+    return streamAction().handleError((error) {
+      throw handleError(error, operation);
+    });
+  }
+}
+```\n
 \n### src/services/firebase_service.dart\n
 ```dart
-// lib/src/services/firebase_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/firebase_error_handler.dart';
 import 'package:uuid/uuid.dart';
 import '../models/game_session.dart';
 
@@ -1975,323 +2171,405 @@ class FirebaseService {
   );
   final _uuid = const Uuid();
 
-  // Update session QR code
-  Future<GameSession> updateSessionQRCode(
-    String sessionId,
-    String qrCode,
-  ) async {
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .update({'qrCode': qrCode});
+  Future<GameSession> updateSessionQRCode(String sessionId, String qrCode) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_session_qr_code',
+      action: () async {
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .update({'qrCode': qrCode});
 
-    final doc =
-        await _firestore.collection('game_sessions').doc(sessionId).get();
-
-    return _parseSessionDoc(doc);
+        final doc = await _firestore.collection('game_sessions').doc(sessionId).get();
+        return _parseSessionDoc(doc);
+      },
+    );
   }
 
-  // Update session status
-  Future<void> updateSessionStatus(
-    String sessionId,
-    bool isActive,
-  ) async {
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .update({'isActive': isActive});
+  Future<void> updateSessionStatus(String sessionId, bool isActive) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_session_status',
+      action: () async {
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .update({'isActive': isActive});
+      },
+    );
   }
 
-  // Get session by ID
   Future<GameSession> getSession(String sessionId) async {
-    final doc =
-        await _firestore.collection('game_sessions').doc(sessionId).get();
-
-    if (!doc.exists) {
-      throw Exception('Session not found');
-    }
-
-    return _parseSessionDoc(doc);
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_session',
+      action: () async {
+        final doc = await _firestore.collection('game_sessions').doc(sessionId).get();
+        if (!doc.exists) {
+          throw Exception('Session not found');
+        }
+        return _parseSessionDoc(doc);
+      },
+    );
   }
 
-  // Get active sessions
   Stream<List<GameSession>> getActiveSessions() {
-    return _firestore
-        .collection('game_sessions')
-        .where('isActive', isEqualTo: true)
-        .orderBy('startTime', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) => _parseSessionDoc(doc)).toList();
-    });
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_active_sessions',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .where('isActive', isEqualTo: true)
+          .orderBy('startTime', descending: true)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs.map((doc) => _parseSessionDoc(doc)).toList();
+      }),
+    );
   }
 
-// Get real-time board state updates
   Stream<Map<String, dynamic>> getBoardState(String sessionId) {
-    return _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('board_state')
-        .doc('current')
-        .snapshots()
-        .map((snapshot) {
-      if (!snapshot.exists) {
-        return {};
-      }
-      return snapshot.data() as Map<String, dynamic>;
-    });
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_board_state',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('board_state')
+          .doc('current')
+          .snapshots()
+          .map((snapshot) {
+        if (!snapshot.exists) {
+          return {};
+        }
+        return snapshot.data() as Map<String, dynamic>;
+      }),
+    );
   }
 
-  // Get real-time session moves
   Stream<List<Map<String, dynamic>>> getSessionMoves(String sessionId) {
-    return _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .orderBy('timestamp', descending: false)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        // Convert Timestamp to DateTime
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_session_moves',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('moves')
+          .orderBy('timestamp', descending: false)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs.map((doc) {
+          final data = doc.data();
+          if (data['timestamp'] is Timestamp) {
+            data['timestamp'] = (data['timestamp'] as Timestamp).toDate();
+          }
+          return data;
+        }).toList();
+      }),
+    );
+  }
+
+  Stream<int> getPlayerScore(String sessionId, String playerId) {
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_player_score',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('moves')
+          .where('playerId', isEqualTo: playerId)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs.fold<int>(
+          0,
+          (sum, doc) => sum + (doc.data()['score'] as int? ?? 0),
+        );
+      }),
+    );
+  }
+
+  Future<void> updatePlayerScore(String sessionId, String playerId, int score) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_player_score',
+      action: () async {
+        await _firestore.collection('game_sessions').doc(sessionId).update({
+          'scores.$playerId': FieldValue.increment(score),
+        });
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> getMove(String sessionId, String moveId) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_move',
+      action: () async {
+        final doc = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .doc(moveId)
+            .get();
+
+        if (!doc.exists) return null;
+
+        final data = doc.data()!;
         if (data['timestamp'] is Timestamp) {
           data['timestamp'] = (data['timestamp'] as Timestamp).toDate();
         }
         return data;
-      }).toList();
-    });
+      },
+    );
   }
 
-  // Get real-time player score
-  Stream<int> getPlayerScore(String sessionId, String playerId) {
-    return _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .where('playerId', isEqualTo: playerId)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.fold<int>(
-        0,
-        (sum, doc) => sum + (doc.data()['score'] as int? ?? 0),
-      );
-    });
-  }
-
-  // Update player score (if needed separately from moves)
-  Future<void> updatePlayerScore(
-      String sessionId, String playerId, int score) async {
-    await _firestore.collection('game_sessions').doc(sessionId).update({
-      'scores.$playerId': FieldValue.increment(score),
-    });
-  }
-
-  // Get single move by ID
-  Future<Map<String, dynamic>?> getMove(String sessionId, String moveId) async {
-    final doc = await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .doc(moveId)
-        .get();
-
-    if (!doc.exists) return null;
-
-    final data = doc.data()!;
-    if (data['timestamp'] is Timestamp) {
-      data['timestamp'] = (data['timestamp'] as Timestamp).toDate();
-    }
-    return data;
-  }
-
-  // Switch to next player's turn
   Future<void> switchTurn(String sessionId) async {
-    final session = await getSession(sessionId);
-    final nextPlayerId = session.getNextPlayerId();
-
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .update({'currentPlayerId': nextPlayerId});
+    return FirebaseErrorHandler.wrap(
+      operation: 'switch_turn',
+      action: () async {
+        final session = await getSession(sessionId);
+        final nextPlayerId = session.getNextPlayerId();
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .update({'currentPlayerId': nextPlayerId});
+      },
+    );
   }
 
-  // Update your createGameSession method to include currentPlayerId
   Future<GameSession> createGameSession({
     required String player1Name,
     required String player2Name,
   }) async {
-    final sessionId = _uuid.v4();
-    final sessionData = {
-      'id': sessionId,
-      'player1Name': player1Name,
-      'player2Name': player2Name,
-      'startTime': FieldValue.serverTimestamp(),
-      'isActive': true,
-      'currentPlayerId': 'p1', // Start with player 1
-      'createdAt': FieldValue.serverTimestamp(),
-    };
+    return FirebaseErrorHandler.wrap(
+      operation: 'create_game_session',
+      action: () async {
+        final sessionId = _uuid.v4();
+        final sessionData = {
+          'id': sessionId,
+          'player1Name': player1Name,
+          'player2Name': player2Name,
+          'startTime': FieldValue.serverTimestamp(),
+          'isActive': true,
+          'currentPlayerId': 'p1',
+          'createdAt': FieldValue.serverTimestamp(),
+        };
 
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .set(sessionData);
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .set(sessionData);
 
-    return GameSession(
-      id: sessionId,
-      player1Name: player1Name,
-      player2Name: player2Name,
-      startTime: DateTime.now(),
-      currentPlayerId: 'p1',
-      isActive: true,
+        return GameSession(
+          id: sessionId,
+          player1Name: player1Name,
+          player2Name: player2Name,
+          startTime: DateTime.now(),
+          currentPlayerId: 'p1',
+          isActive: true,
+        );
+      },
     );
   }
 
   Future<String?> getLastMoveImage(String sessionId) async {
-    try {
-      final querySnapshot = await _firestore
-          .collection('game_sessions')
-          .doc(sessionId)
-          .collection('moves')
-          .orderBy('timestamp', descending: true)
-          .limit(1)
-          .get();
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_last_move_image',
+      action: () async {
+        final querySnapshot = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .orderBy('timestamp', descending: true)
+            .limit(1)
+            .get();
 
-      if (querySnapshot.docs.isEmpty) {
-        return null;
-      }
+        if (querySnapshot.docs.isEmpty) {
+          return null;
+        }
 
-      final moveData = querySnapshot.docs.first.data();
-      return moveData['imagePath'] as String?;
-    } catch (e) {
-      print('Error getting last move image: $e');
-      return null;
-    }
+        final moveData = querySnapshot.docs.first.data();
+        return moveData['imagePath'] as String?;
+      },
+    );
   }
 
-  // Update the addMoveToSession method to include the image path
   Future<void> addMoveToSession({
     required String sessionId,
     required String word,
     required int score,
     required String playerId,
     required List<Map<String, dynamic>> tiles,
-    String? imagePath, // Add this parameter
+    String? imagePath,
   }) async {
-    final batch = _firestore.batch();
+    return FirebaseErrorHandler.wrap(
+      operation: 'add_move_to_session',
+      action: () async {
+        final batch = _firestore.batch();
+        final moveRef = _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .doc();
 
-    // Add the move
-    final moveRef = _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .doc();
+        batch.set(moveRef, {
+          'word': word,
+          'score': score,
+          'playerId': playerId,
+          'tiles': tiles,
+          'timestamp': FieldValue.serverTimestamp(),
+          'imagePath': imagePath,
+        });
 
-    batch.set(moveRef, {
-      'word': word,
-      'score': score,
-      'playerId': playerId,
-      'tiles': tiles,
-      'timestamp': FieldValue.serverTimestamp(),
-      'imagePath': imagePath, // Store the image path
-    });
+        final sessionRef = _firestore.collection('game_sessions').doc(sessionId);
+        final session = await getSession(sessionId);
 
-    // Switch to next player
-    final sessionRef = _firestore.collection('game_sessions').doc(sessionId);
-    final session = await getSession(sessionId);
+        batch.update(sessionRef, {
+          'currentPlayerId': session.getNextPlayerId(),
+          'lastMoveImage': imagePath,
+        });
 
-    batch.update(sessionRef, {
-      'currentPlayerId': session.getNextPlayerId(),
-      'lastMoveImage': imagePath, // Also store in session for quick access
-    });
-
-    await batch.commit();
+        await batch.commit();
+      },
+    );
   }
 
   Stream<QuerySnapshot> getGameSessions() {
-    return _firestore
-        .collection('game_sessions')
-        .orderBy('startTime', descending: true)
-        .snapshots();
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_game_sessions',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .orderBy('startTime', descending: true)
+          .snapshots(),
+    );
   }
 
-  // Delete a session and all its subcollections
   Future<void> deleteSession(String sessionId) async {
-    // Delete moves subcollection
-    final movesSnapshot = await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .get();
+    return FirebaseErrorHandler.wrap(
+      operation: 'delete_session',
+      action: () async {
+        final movesSnapshot = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .get();
 
-    final batch = _firestore.batch();
-
-    for (var doc in movesSnapshot.docs) {
-      batch.delete(doc.reference);
-    }
-
-    // Delete main session document
-    batch.delete(_firestore.collection('game_sessions').doc(sessionId));
-
-    await batch.commit();
+        final batch = _firestore.batch();
+        for (var doc in movesSnapshot.docs) {
+          batch.delete(doc.reference);
+        }
+        batch.delete(_firestore.collection('game_sessions').doc(sessionId));
+        await batch.commit();
+      },
+    );
   }
 
-  // Get remaining letters
   Future<int> getRemainingLetters(String sessionId) async {
-    final doc = await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('game_state')
-        .doc('letters')
-        .get();
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_remaining_letters',
+      action: () async {
+        final doc = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('game_state')
+            .doc('letters')
+            .get();
 
-    if (!doc.exists) {
-      return 0;
-    }
+        if (!doc.exists) {
+          return 0;
+        }
 
-    final data = doc.data() as Map<String, dynamic>;
-    return data['remaining'] ?? 0;
+        final data = doc.data() as Map<String, dynamic>;
+        return data['remaining'] ?? 0;
+      },
+    );
   }
 
-  // Update the board state with new tiles
-  Future<void> updateBoardState(
-      String sessionId, List<Map<String, dynamic>> tiles) async {
-    final batch = _firestore.batch();
-    final boardRef = _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('board_state')
-        .doc('current');
+  Future<void> updateBoardState(String sessionId, List<Map<String, dynamic>> tiles) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_board_state',
+      action: () async {
+        final batch = _firestore.batch();
+        final boardRef = _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('board_state')
+            .doc('current');
 
-    // Get current board state
-    final currentState = await boardRef.get();
-    Map<String, dynamic> currentData = currentState.data() ?? {};
+        final currentState = await boardRef.get();
+        Map<String, dynamic> currentData = currentState.data() ?? {};
 
-    // Update with new tiles
-    for (var tile in tiles) {
-      String key = '${tile['row']}-${tile['col']}';
-      currentData[key] = {
-        'letter': tile['letter'],
-        'points': tile['points'],
-        'playerId': tile['playerId'],
-      };
-    }
+        for (var tile in tiles) {
+          String key = '${tile['row']}-${tile['col']}';
+          currentData[key] = {
+            'letter': tile['letter'],
+            'points': tile['points'],
+            'playerId': tile['playerId'],
+          };
+        }
 
-    batch.set(boardRef, currentData, SetOptions(merge: true));
-    await batch.commit();
+        batch.set(boardRef, currentData, SetOptions(merge: true));
+        await batch.commit();
+      },
+    );
   }
 
-// Update the session with the last move's image path
   Future<void> updateSessionImage(String sessionId, String imagePath) async {
-    await _firestore.collection('game_sessions').doc(sessionId).update({
-      'lastMoveImage': imagePath,
-    });
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_session_image',
+      action: () async {
+        await _firestore.collection('game_sessions').doc(sessionId).update({
+          'lastMoveImage': imagePath,
+        });
+      },
+    );
+  }
+
+  Future<Move?> getLastMove(String sessionId) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_last_move',
+      action: () async {
+        final querySnapshot = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .orderBy('timestamp', descending: true)
+            .limit(1)
+            .get();
+
+        if (querySnapshot.docs.isEmpty) {
+          return null;
+        }
+
+        return Move.fromJson(querySnapshot.docs.first.data());
+      },
+    );
+  }
+
+  Future<void> switchCurrentPlayer(String sessionId, String playerId) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'switch_current_player',
+      action: () async {
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .update({'currentPlayerId': playerId});
+      },
+    );
+  }
+
+  Future<int> getMoveCount(String sessionId) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_move_count',
+      action: () async {
+        final movesSnapshot = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .count()
+            .get();
+
+        return movesSnapshot.count ?? 0;
+      },
+    );
   }
 
   GameSession _parseSessionDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final timestamp = data['startTime'] as Timestamp;
 
-    // Get moves from the document if they exist
     List<Move> moves = [];
     if (data['moves'] != null) {
       moves = (data['moves'] as List)
@@ -2310,47 +2588,141 @@ class FirebaseService {
       moves: moves,
     );
   }
+}```\n
+\n### src/services/image_storage_service.dart\n
+```dart
+// lib/src/services/image_storage_service.dart
 
-  Future<Move?> getLastMove(String sessionId) async {
-    try {
-      final querySnapshot = await _firestore
-          .collection('game_sessions')
-          .doc(sessionId)
-          .collection('moves')
-          .orderBy('timestamp', descending: true)
-          .limit(1)
-          .get();
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:path/path.dart' as path;
+import 'firebase_error_handler.dart';
 
-      if (querySnapshot.docs.isEmpty) {
-        return null;
-      }
+class ImageStorageService {
+  final FirebaseStorage _storage = FirebaseStorage.instance;
+  
+  // Singleton pattern
+  static final ImageStorageService _instance = ImageStorageService._internal();
+  
+  factory ImageStorageService() {
+    return _instance;
+  }
+  
+  ImageStorageService._internal();
 
-      return Move.fromJson(querySnapshot.docs.first.data());
-    } catch (e) {
-      print('Error getting last move: $e');
-      return null;
-    }
+  // Upload an image file with progress tracking
+  Future<String> uploadImage({
+    required String imagePath,
+    required String directory,
+    required String fileName,
+    Map<String, String>? metadata,
+    Function(double progress)? onProgress,
+  }) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'image_upload',
+      action: () async {
+        final File file = File(imagePath);
+        if (!await file.exists()) {
+          throw Exception('Image file not found at $imagePath');
+        }
+
+        // Create storage reference
+        final String fullPath = '$directory/$fileName${path.extension(imagePath)}';
+        final ref = _storage.ref().child(fullPath);
+
+        // Set up upload task
+        final uploadTask = ref.putFile(
+          file,
+          SettableMetadata(
+            contentType: 'image/jpeg',
+            customMetadata: metadata,
+          ),
+        );
+
+        // Monitor upload progress
+        if (onProgress != null) {
+          uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+            final progress = snapshot.bytesTransferred / snapshot.totalBytes;
+            onProgress(progress);
+          });
+        }
+
+        // Wait for upload to complete
+        await uploadTask;
+
+        // Return the download URL
+        return await ref.getDownloadURL();
+      },
+    );
   }
 
-  Future<void> switchCurrentPlayer(String sessionId, String playerId) async {
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .update({'currentPlayerId': playerId});
+  // Upload a move image specifically for the game
+  Future<String> uploadMoveImage({
+    required String sessionId,
+    required String imagePath,
+    required int moveNumber,
+    Function(double progress)? onProgress,
+  }) async {
+    final fileName = 'move_$moveNumber';
+    final metadata = {
+      'sessionId': sessionId,
+      'moveNumber': moveNumber.toString(),
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    return uploadImage(
+      imagePath: imagePath,
+      directory: 'moves/$sessionId',
+      fileName: fileName,
+      metadata: metadata,
+      onProgress: onProgress,
+    );
   }
 
-    Future<int> getMoveCount(String sessionId) async {
-    final movesSnapshot = await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .count()
-        .get();
-    
-    return movesSnapshot.count ?? 0;
+  // Delete an image
+  Future<void> deleteImage(String imagePath) async {
+    await FirebaseErrorHandler.wrap(
+      operation: 'image_delete',
+      action: () => _storage.ref(imagePath).delete(),
+    );
   }
-}
-```\n
+
+  // Get image metadata
+  Future<Map<String, String>> getImageMetadata(String imagePath) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_image_metadata',
+      action: () async {
+        final metadata = await _storage.ref(imagePath).getMetadata();
+        return metadata.customMetadata ?? {};
+      },
+    );
+  }
+
+  // List all images in a directory
+  Future<List<String>> listImages(String directory) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'list_images',
+      action: () async {
+        final result = await _storage.ref(directory).listAll();
+        return await Future.wait(
+          result.items.map((ref) => ref.getDownloadURL()),
+        );
+      },
+    );
+  }
+
+  // Download image to a local file
+  Future<File> downloadImage(String imagePath, String localPath) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'download_image',
+      action: () async {
+        final File file = File(localPath);
+        await _storage.ref(imagePath).writeToFile(file);
+        return file;
+      },
+    );
+  }
+}```\n
 \n### src/services/board_validator.dart\n
 ```dart
 // lib/src/services/board_validator.dart
@@ -2461,58 +2833,18 @@ class BoardValidator {
 ```dart
 import 'dart:convert';
 import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/image_storage_service.dart';
 import '../services/firebase_service.dart';
 
 class GeminiService {
   late GenerativeModel _model;
+  final ImageStorageService _imageStorage = ImageStorageService();
   final FirebaseService _firebaseService = FirebaseService();
-  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   GeminiService() {
-    _model =
-        FirebaseVertexAI.instance.generativeModel(model: 'gemini-2.0-flash-exp');
-  }
-
-  Future<String> _uploadImageToStorage(
-      String sessionId, String imagePath, int moveNumber) async {
-    try {
-      final File imageFile = File(imagePath);
-      if (!await imageFile.exists()) {
-        throw Exception('Image file not found at $imagePath');
-      }
-
-      final fileName = 'moves/${sessionId}/${moveNumber}.jpg';
-      final ref = _storage.ref().child(fileName);
-
-      // Create upload task
-      final uploadTask = ref.putFile(
-        imageFile,
-        SettableMetadata(
-          contentType: 'image/jpeg',
-          customMetadata: {
-            'sessionId': sessionId,
-            'moveNumber': moveNumber.toString(),
-          },
-        ),
-      );
-
-      // Monitor upload progress
-      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        print(
-            'Upload progress: ${snapshot.bytesTransferred}/${snapshot.totalBytes}');
-      });
-
-      // Wait for upload to complete
-      await uploadTask;
-
-      print('Image uploaded successfully to $fileName');
-      return fileName;
-    } catch (e) {
-      print('Error uploading image: $e');
-      throw Exception('Failed to upload image: $e');
-    }
+    _model = FirebaseVertexAI.instance
+        .generativeModel(model: 'gemini-2.0-flash-exp');
   }
 
   Future<Map<String, dynamic>> analyzeBoardImage(
@@ -2524,16 +2856,19 @@ class GeminiService {
       final moveCount = await _firebaseService.getMoveCount(sessionId);
       final currentMoveNumber = moveCount + 1;
 
+      // Upload image using the new ImageStorageService
+      final currentImagePath = await _imageStorage.uploadMoveImage(
+        sessionId: sessionId,
+        imagePath: imagePath,
+        moveNumber: currentMoveNumber,
+        onProgress: (progress) {
+          print('Upload progress: ${(progress * 100).toStringAsFixed(1)}%');
+        },
+      );
+
       // Get previous board state
       final boardState = await _firebaseService.getBoardState(sessionId).first;
       final isFirstMove = boardState.isEmpty;
-
-      // Upload current image with sequential naming
-      final currentImagePath = await _uploadImageToStorage(
-        sessionId,
-        imagePath,
-        currentMoveNumber,
-      );
 
       // Read current image bytes
       final currentImageBytes = await File(imagePath).readAsBytes();
@@ -2561,13 +2896,13 @@ class GeminiService {
       } else {
         // Get previous image
         final previousMoveNumber = currentMoveNumber - 1;
-        final previousImageRef =
-            _storage.ref().child('moves/$sessionId/$previousMoveNumber.jpg');
+        final previousImagePath = await _imageStorage.downloadImage(
+          'moves/$sessionId/move_$previousMoveNumber.jpg',
+          // Provide a temporary local path for the downloaded file
+          '${Directory.systemTemp.path}/prev_move_$previousMoveNumber.jpg',
+        );
 
-        final prevImageBytes = await previousImageRef.getData();
-        if (prevImageBytes == null) {
-          throw Exception('Previous move image not found');
-        }
+        final prevImageBytes = await previousImagePath.readAsBytes();
 
         // Compare images using Gemini
         final response = await _model.generateContent([
@@ -2678,6 +3013,8 @@ Rules:
 \n### src/services/score_calculator.dart\n
 ```dart
 // lib/src/services/score_calculator.dart
+
+import '../config/board_config.dart';
 import '../models/board_square.dart';
 
 class ScoreCalculator {
@@ -2688,61 +3025,30 @@ class ScoreCalculator {
     'K': 10, 'L': 1, 'M': 2, 'N': 1, 'O': 1,
     'P': 3, 'Q': 8, 'R': 1, 'S': 1, 'T': 1,
     'U': 1, 'V': 4, 'W': 10, 'X': 10, 'Y': 10,
-    'Z': 10, '*': 0, // Blank tiles worth 0 points
+    'Z': 10, '*': 0  // Blank tiles
   };
 
-  static SquareType getSquareType(int row, int col) {
-    // Center square
-    if (row == 7 && col == 7) {
-      return SquareType.doubleWord;
-    }
-
-    // Triple Word Score
-    if ((row == 0 || row == 14) && (col == 0 || col == 7 || col == 14) ||
-        (row == 7 && (col == 0 || col == 14))) {
-      return SquareType.tripleWord;
-    }
-
-    // Double Word Score
-    if (row == col || row + col == 14) {
-      if (row >= 1 && row <= 5 || row >= 9 && row <= 13) {
-        return SquareType.doubleWord;
-      }
-    }
-
-    // Triple Letter Score
-    if ((row == 1 || row == 13) && (col == 5 || col == 9) ||
-        (row == 5 || row == 9) &&
-            (col == 1 || col == 5 || col == 9 || col == 13)) {
-      return SquareType.tripleLetter;
-    }
-
-    // Double Letter Score
-    if ((row == 3 || row == 11) && (col == 0 || col == 7 || col == 14) ||
-        (row == 6 || row == 8) && (col == 2 || col == 6 || col == 8 || col == 12) ||
-        (row == 0 || row == 7 || col == 14) && (col == 3 || col == 11)) {
-      return SquareType.doubleLetter;
-    }
-
-    return SquareType.normal;
-  }
-
   static int calculateScore(List<Map<String, dynamic>> tiles, {bool isFirstMove = false}) {
-    int wordScore = 0;
+    int baseScore = 0;
     int wordMultiplier = 1;
-    bool usedCenter = false;
+    bool usesCenterSquare = false;
 
-    // Calculate base score with letter multipliers
+    // First pass: Calculate base scores and collect multipliers
     for (var tile in tiles) {
-      int letterScore = letterPoints[tile['letter']] ?? 0;
-      final squareType = getSquareType(tile['row'], tile['col']);
-
-      // Check if using center square
-      if (tile['row'] == 7 && tile['col'] == 7) {
-        usedCenter = true;
+      final row = tile['row'] as int;
+      final col = tile['col'] as int;
+      final letter = tile['letter'] as String;
+      final squareType = BoardConfig.getSquareType(row, col);
+      
+      // Track center square usage
+      if (BoardConfig.isCenterSquare(row, col)) {
+        usesCenterSquare = true;
       }
 
-      // Apply letter multipliers
+      // Get base letter score
+      int letterScore = letterPoints[letter] ?? 0;
+
+      // Handle letter multipliers immediately
       switch (squareType) {
         case SquareType.doubleLetter:
           letterScore *= 2;
@@ -2760,23 +3066,23 @@ class ScoreCalculator {
           break;
       }
 
-      wordScore += letterScore;
+      baseScore += letterScore;
     }
 
-    // Apply word multiplier
-    wordScore *= wordMultiplier;
+    // Apply word multiplier to total base score
+    int finalScore = baseScore * wordMultiplier;
 
-    // First move must use center square and gets double word score
-    if (isFirstMove && usedCenter) {
-      wordScore *= 2;
+    // First move validation and bonus
+    if (isFirstMove) {
+      if (!usesCenterSquare) return 0; // Invalid move
     }
 
-    // Add Scrabble bonus (50 points) if all 7 letters are used
+    // Add bingo bonus (50 points) for using all 7 tiles
     if (tiles.length == 7) {
-      wordScore += 50;
+      finalScore += 50;
     }
 
-    return wordScore;
+    return finalScore;
   }
 }```\n
 \n### src/services/qr_service.dart\n
@@ -2865,8 +3171,11 @@ class QRDisplayScreen extends StatelessWidget {
 \n### src/widgets/board_preview_widget.dart\n
 ```dart
 // lib/src/widgets/board_preview_widget.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config/board_config.dart';
+import '../models/board_square.dart';
 import '../providers/game_session_provider.dart';
 import '../services/firebase_service.dart';
 
@@ -2913,15 +3222,16 @@ class BoardPreviewWidget extends StatelessWidget {
 
   Widget _buildSquare(BuildContext context, Map<String, dynamic> boardState, int row, int col) {
     final squareData = boardState['$row-$col'] as Map<String, dynamic>?;
+    final squareType = BoardConfig.getSquareType(row, col);
 
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.black12),
-        color: _getSquareColor(squareData?['type'] ?? 'normal'),
+        color: BoardConfig.getSquareColor(squareType),
       ),
       child: squareData?['letter'] != null
           ? _buildTile(context, squareData!)
-          : _buildSquareContent(squareData?['type'] ?? 'normal'),
+          : _buildSquareLabel(squareType),
     );
   }
 
@@ -2967,27 +3277,9 @@ class BoardPreviewWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildSquareContent(String type) {
-    String label = '';
-    switch (type) {
-      case 'tripleWord':
-        label = 'TW';
-        break;
-      case 'doubleWord':
-        label = 'DW';
-        break;
-      case 'tripleLetter':
-        label = 'TL';
-        break;
-      case 'doubleLetter':
-        label = 'DL';
-        break;
-      case 'center':
-        label = '★';
-        break;
-      default:
-        return const SizedBox();
-    }
+  Widget _buildSquareLabel(SquareType type) {
+    final label = BoardConfig.getSquareLabel(type);
+    if (label.isEmpty) return const SizedBox();
 
     return Center(
       child: Text(
@@ -2999,23 +3291,6 @@ class BoardPreviewWidget extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Color _getSquareColor(String type) {
-    switch (type) {
-      case 'tripleWord':
-        return Colors.red[100]!;
-      case 'doubleWord':
-        return Colors.pink[50]!;
-      case 'tripleLetter':
-        return Colors.blue[100]!;
-      case 'doubleLetter':
-        return Colors.lightBlue[50]!;
-      case 'center':
-        return Colors.pink[50]!;
-      default:
-        return Colors.white;
-    }
   }
 }```\n
 \n### src/widgets/board_overlay_painter.dart\n
@@ -3389,9 +3664,6 @@ class PlayerInfoWidget extends StatelessWidget {
     );
   }
 }```\n
-\n### src/widgets/camera_overlay_widget.dart\n
-```dart
-```\n
 \n### src/widgets/recognition_metrics_viewer.dart\n
 ```dart
 import 'package:flutter/material.dart';
@@ -3474,159 +3746,6 @@ class MetricsViewer extends StatelessWidget {
   }
 }
 ```\n
-\n### src/widgets/board_preview_widget_2.dart\n
-```dart
-// lib/src/widgets/board_preview_widget.dart
-import 'package:flutter/material.dart';
-import '../models/board_square.dart';
-import '../services/score_calculator.dart';
-
-class BoardPreviewWidget extends StatelessWidget {
-  final List<Map<String, dynamic>> newTiles;
-  final List<List<BoardSquare>> currentBoard;
-  final bool isFirstMove;
-
-  const BoardPreviewWidget({
-    super.key,
-    required this.newTiles,
-    required this.currentBoard,
-    required this.isFirstMove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 300,
-      height: 300,
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 15,
-          childAspectRatio: 1,
-        ),
-        itemCount: 225,
-        itemBuilder: (context, index) {
-          final row = index ~/ 15;
-          final col = index % 15;
-          
-          // Find if there's a new tile at this position
-          final newTile = newTiles.firstWhere(
-            (tile) => tile['row'] == row && tile['col'] == col,
-            orElse: () => {'letter': null},
-          );
-
-          // Get existing tile
-          final existingTile = currentBoard[row][col].tile;
-          
-          // Get square type
-          final squareType = ScoreCalculator.getSquareType(row, col);
-          
-          return _buildSquare(
-            context,
-            row: row,
-            col: col,
-            squareType: squareType,
-            newTile: newTile['letter'] != null ? newTile : null,
-            existingTile: existingTile,
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSquare(
-    BuildContext context, {
-    required int row,
-    required int col,
-    required SquareType squareType,
-    Map<String, dynamic>? newTile,
-    dynamic existingTile,
-  }) {
-    final isNewTilePlacement = newTile != null;
-    final hasExistingTile = existingTile != null;
-    
-    Color getBackgroundColor() {
-      if (isNewTilePlacement) return Colors.yellow[100]!;
-      if (hasExistingTile) return Colors.brown[100]!;
-      
-      switch (squareType) {
-        case SquareType.tripleWord:
-          return Colors.red[100]!;
-        case SquareType.doubleWord:
-          return Colors.pink[50]!;
-        case SquareType.tripleLetter:
-          return Colors.blue[100]!;
-        case SquareType.doubleLetter:
-          return Colors.lightBlue[50]!;
-        default:
-          return Colors.white;
-      }
-    }
-
-    String getMultiplierLabel() {
-      switch (squareType) {
-        case SquareType.tripleWord:
-          return 'TW';
-        case SquareType.doubleWord:
-          return 'DW';
-        case SquareType.tripleLetter:
-          return 'TL';
-        case SquareType.doubleLetter:
-          return 'DL';
-        default:
-          return '';
-      }
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: getBackgroundColor(),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Stack(
-        children: [
-          if (!isNewTilePlacement && !hasExistingTile && getMultiplierLabel().isNotEmpty)
-            Center(
-              child: Text(
-                getMultiplierLabel(),
-                style: TextStyle(
-                  fontSize: 8,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ),
-          if (isNewTilePlacement || hasExistingTile)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: isNewTilePlacement ? Colors.yellow : Colors.brown[200],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Text(
-                  isNewTilePlacement ? newTile!['letter'] : existingTile.letter,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: isNewTilePlacement ? Colors.black : Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          if (row == 7 && col == 7 && !hasExistingTile && !isNewTilePlacement)
-            const Center(
-              child: Text(
-                '★',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.pink,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}```\n
 \n## pubspec.yaml\n
 ```yaml
 name: oloodi_scrabble_moderator_app

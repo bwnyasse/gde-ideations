@@ -1,57 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/image_storage_service.dart';
 import '../services/firebase_service.dart';
 
 class GeminiService {
   late GenerativeModel _model;
+  final ImageStorageService _imageStorage = ImageStorageService();
   final FirebaseService _firebaseService = FirebaseService();
-  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   GeminiService() {
-    _model =
-        FirebaseVertexAI.instance.generativeModel(model: 'gemini-2.0-flash-exp');
-  }
-
-  Future<String> _uploadImageToStorage(
-      String sessionId, String imagePath, int moveNumber) async {
-    try {
-      final File imageFile = File(imagePath);
-      if (!await imageFile.exists()) {
-        throw Exception('Image file not found at $imagePath');
-      }
-
-      final fileName = 'moves/${sessionId}/${moveNumber}.jpg';
-      final ref = _storage.ref().child(fileName);
-
-      // Create upload task
-      final uploadTask = ref.putFile(
-        imageFile,
-        SettableMetadata(
-          contentType: 'image/jpeg',
-          customMetadata: {
-            'sessionId': sessionId,
-            'moveNumber': moveNumber.toString(),
-          },
-        ),
-      );
-
-      // Monitor upload progress
-      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        print(
-            'Upload progress: ${snapshot.bytesTransferred}/${snapshot.totalBytes}');
-      });
-
-      // Wait for upload to complete
-      await uploadTask;
-
-      print('Image uploaded successfully to $fileName');
-      return fileName;
-    } catch (e) {
-      print('Error uploading image: $e');
-      throw Exception('Failed to upload image: $e');
-    }
+    _model = FirebaseVertexAI.instance
+        .generativeModel(model: 'gemini-2.0-flash-exp');
   }
 
   Future<Map<String, dynamic>> analyzeBoardImage(
@@ -63,16 +23,19 @@ class GeminiService {
       final moveCount = await _firebaseService.getMoveCount(sessionId);
       final currentMoveNumber = moveCount + 1;
 
+      // Upload image using the new ImageStorageService
+      final currentImagePath = await _imageStorage.uploadMoveImage(
+        sessionId: sessionId,
+        imagePath: imagePath,
+        moveNumber: currentMoveNumber,
+        onProgress: (progress) {
+          print('Upload progress: ${(progress * 100).toStringAsFixed(1)}%');
+        },
+      );
+
       // Get previous board state
       final boardState = await _firebaseService.getBoardState(sessionId).first;
       final isFirstMove = boardState.isEmpty;
-
-      // Upload current image with sequential naming
-      final currentImagePath = await _uploadImageToStorage(
-        sessionId,
-        imagePath,
-        currentMoveNumber,
-      );
 
       // Read current image bytes
       final currentImageBytes = await File(imagePath).readAsBytes();
@@ -100,13 +63,13 @@ class GeminiService {
       } else {
         // Get previous image
         final previousMoveNumber = currentMoveNumber - 1;
-        final previousImageRef =
-            _storage.ref().child('moves/$sessionId/$previousMoveNumber.jpg');
+        final previousImagePath = await _imageStorage.downloadImage(
+          'moves/$sessionId/move_$previousMoveNumber.jpg',
+          // Provide a temporary local path for the downloaded file
+          '${Directory.systemTemp.path}/prev_move_$previousMoveNumber.jpg',
+        );
 
-        final prevImageBytes = await previousImageRef.getData();
-        if (prevImageBytes == null) {
-          throw Exception('Previous move image not found');
-        }
+        final prevImageBytes = await previousImagePath.readAsBytes();
 
         // Compare images using Gemini
         final response = await _model.generateContent([

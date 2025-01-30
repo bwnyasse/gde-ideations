@@ -1,5 +1,5 @@
-// lib/src/services/firebase_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/firebase_error_handler.dart';
 import 'package:uuid/uuid.dart';
 import '../models/game_session.dart';
 
@@ -10,323 +10,405 @@ class FirebaseService {
   );
   final _uuid = const Uuid();
 
-  // Update session QR code
-  Future<GameSession> updateSessionQRCode(
-    String sessionId,
-    String qrCode,
-  ) async {
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .update({'qrCode': qrCode});
+  Future<GameSession> updateSessionQRCode(String sessionId, String qrCode) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_session_qr_code',
+      action: () async {
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .update({'qrCode': qrCode});
 
-    final doc =
-        await _firestore.collection('game_sessions').doc(sessionId).get();
-
-    return _parseSessionDoc(doc);
+        final doc = await _firestore.collection('game_sessions').doc(sessionId).get();
+        return _parseSessionDoc(doc);
+      },
+    );
   }
 
-  // Update session status
-  Future<void> updateSessionStatus(
-    String sessionId,
-    bool isActive,
-  ) async {
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .update({'isActive': isActive});
+  Future<void> updateSessionStatus(String sessionId, bool isActive) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_session_status',
+      action: () async {
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .update({'isActive': isActive});
+      },
+    );
   }
 
-  // Get session by ID
   Future<GameSession> getSession(String sessionId) async {
-    final doc =
-        await _firestore.collection('game_sessions').doc(sessionId).get();
-
-    if (!doc.exists) {
-      throw Exception('Session not found');
-    }
-
-    return _parseSessionDoc(doc);
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_session',
+      action: () async {
+        final doc = await _firestore.collection('game_sessions').doc(sessionId).get();
+        if (!doc.exists) {
+          throw Exception('Session not found');
+        }
+        return _parseSessionDoc(doc);
+      },
+    );
   }
 
-  // Get active sessions
   Stream<List<GameSession>> getActiveSessions() {
-    return _firestore
-        .collection('game_sessions')
-        .where('isActive', isEqualTo: true)
-        .orderBy('startTime', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) => _parseSessionDoc(doc)).toList();
-    });
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_active_sessions',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .where('isActive', isEqualTo: true)
+          .orderBy('startTime', descending: true)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs.map((doc) => _parseSessionDoc(doc)).toList();
+      }),
+    );
   }
 
-// Get real-time board state updates
   Stream<Map<String, dynamic>> getBoardState(String sessionId) {
-    return _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('board_state')
-        .doc('current')
-        .snapshots()
-        .map((snapshot) {
-      if (!snapshot.exists) {
-        return {};
-      }
-      return snapshot.data() as Map<String, dynamic>;
-    });
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_board_state',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('board_state')
+          .doc('current')
+          .snapshots()
+          .map((snapshot) {
+        if (!snapshot.exists) {
+          return {};
+        }
+        return snapshot.data() as Map<String, dynamic>;
+      }),
+    );
   }
 
-  // Get real-time session moves
   Stream<List<Map<String, dynamic>>> getSessionMoves(String sessionId) {
-    return _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .orderBy('timestamp', descending: false)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        // Convert Timestamp to DateTime
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_session_moves',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('moves')
+          .orderBy('timestamp', descending: false)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs.map((doc) {
+          final data = doc.data();
+          if (data['timestamp'] is Timestamp) {
+            data['timestamp'] = (data['timestamp'] as Timestamp).toDate();
+          }
+          return data;
+        }).toList();
+      }),
+    );
+  }
+
+  Stream<int> getPlayerScore(String sessionId, String playerId) {
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_player_score',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('moves')
+          .where('playerId', isEqualTo: playerId)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs.fold<int>(
+          0,
+          (sum, doc) => sum + (doc.data()['score'] as int? ?? 0),
+        );
+      }),
+    );
+  }
+
+  Future<void> updatePlayerScore(String sessionId, String playerId, int score) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_player_score',
+      action: () async {
+        await _firestore.collection('game_sessions').doc(sessionId).update({
+          'scores.$playerId': FieldValue.increment(score),
+        });
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> getMove(String sessionId, String moveId) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_move',
+      action: () async {
+        final doc = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .doc(moveId)
+            .get();
+
+        if (!doc.exists) return null;
+
+        final data = doc.data()!;
         if (data['timestamp'] is Timestamp) {
           data['timestamp'] = (data['timestamp'] as Timestamp).toDate();
         }
         return data;
-      }).toList();
-    });
+      },
+    );
   }
 
-  // Get real-time player score
-  Stream<int> getPlayerScore(String sessionId, String playerId) {
-    return _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .where('playerId', isEqualTo: playerId)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.fold<int>(
-        0,
-        (sum, doc) => sum + (doc.data()['score'] as int? ?? 0),
-      );
-    });
-  }
-
-  // Update player score (if needed separately from moves)
-  Future<void> updatePlayerScore(
-      String sessionId, String playerId, int score) async {
-    await _firestore.collection('game_sessions').doc(sessionId).update({
-      'scores.$playerId': FieldValue.increment(score),
-    });
-  }
-
-  // Get single move by ID
-  Future<Map<String, dynamic>?> getMove(String sessionId, String moveId) async {
-    final doc = await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .doc(moveId)
-        .get();
-
-    if (!doc.exists) return null;
-
-    final data = doc.data()!;
-    if (data['timestamp'] is Timestamp) {
-      data['timestamp'] = (data['timestamp'] as Timestamp).toDate();
-    }
-    return data;
-  }
-
-  // Switch to next player's turn
   Future<void> switchTurn(String sessionId) async {
-    final session = await getSession(sessionId);
-    final nextPlayerId = session.getNextPlayerId();
-
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .update({'currentPlayerId': nextPlayerId});
+    return FirebaseErrorHandler.wrap(
+      operation: 'switch_turn',
+      action: () async {
+        final session = await getSession(sessionId);
+        final nextPlayerId = session.getNextPlayerId();
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .update({'currentPlayerId': nextPlayerId});
+      },
+    );
   }
 
-  // Update your createGameSession method to include currentPlayerId
   Future<GameSession> createGameSession({
     required String player1Name,
     required String player2Name,
   }) async {
-    final sessionId = _uuid.v4();
-    final sessionData = {
-      'id': sessionId,
-      'player1Name': player1Name,
-      'player2Name': player2Name,
-      'startTime': FieldValue.serverTimestamp(),
-      'isActive': true,
-      'currentPlayerId': 'p1', // Start with player 1
-      'createdAt': FieldValue.serverTimestamp(),
-    };
+    return FirebaseErrorHandler.wrap(
+      operation: 'create_game_session',
+      action: () async {
+        final sessionId = _uuid.v4();
+        final sessionData = {
+          'id': sessionId,
+          'player1Name': player1Name,
+          'player2Name': player2Name,
+          'startTime': FieldValue.serverTimestamp(),
+          'isActive': true,
+          'currentPlayerId': 'p1',
+          'createdAt': FieldValue.serverTimestamp(),
+        };
 
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .set(sessionData);
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .set(sessionData);
 
-    return GameSession(
-      id: sessionId,
-      player1Name: player1Name,
-      player2Name: player2Name,
-      startTime: DateTime.now(),
-      currentPlayerId: 'p1',
-      isActive: true,
+        return GameSession(
+          id: sessionId,
+          player1Name: player1Name,
+          player2Name: player2Name,
+          startTime: DateTime.now(),
+          currentPlayerId: 'p1',
+          isActive: true,
+        );
+      },
     );
   }
 
   Future<String?> getLastMoveImage(String sessionId) async {
-    try {
-      final querySnapshot = await _firestore
-          .collection('game_sessions')
-          .doc(sessionId)
-          .collection('moves')
-          .orderBy('timestamp', descending: true)
-          .limit(1)
-          .get();
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_last_move_image',
+      action: () async {
+        final querySnapshot = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .orderBy('timestamp', descending: true)
+            .limit(1)
+            .get();
 
-      if (querySnapshot.docs.isEmpty) {
-        return null;
-      }
+        if (querySnapshot.docs.isEmpty) {
+          return null;
+        }
 
-      final moveData = querySnapshot.docs.first.data();
-      return moveData['imagePath'] as String?;
-    } catch (e) {
-      print('Error getting last move image: $e');
-      return null;
-    }
+        final moveData = querySnapshot.docs.first.data();
+        return moveData['imagePath'] as String?;
+      },
+    );
   }
 
-  // Update the addMoveToSession method to include the image path
   Future<void> addMoveToSession({
     required String sessionId,
     required String word,
     required int score,
     required String playerId,
     required List<Map<String, dynamic>> tiles,
-    String? imagePath, // Add this parameter
+    String? imagePath,
   }) async {
-    final batch = _firestore.batch();
+    return FirebaseErrorHandler.wrap(
+      operation: 'add_move_to_session',
+      action: () async {
+        final batch = _firestore.batch();
+        final moveRef = _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .doc();
 
-    // Add the move
-    final moveRef = _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .doc();
+        batch.set(moveRef, {
+          'word': word,
+          'score': score,
+          'playerId': playerId,
+          'tiles': tiles,
+          'timestamp': FieldValue.serverTimestamp(),
+          'imagePath': imagePath,
+        });
 
-    batch.set(moveRef, {
-      'word': word,
-      'score': score,
-      'playerId': playerId,
-      'tiles': tiles,
-      'timestamp': FieldValue.serverTimestamp(),
-      'imagePath': imagePath, // Store the image path
-    });
+        final sessionRef = _firestore.collection('game_sessions').doc(sessionId);
+        final session = await getSession(sessionId);
 
-    // Switch to next player
-    final sessionRef = _firestore.collection('game_sessions').doc(sessionId);
-    final session = await getSession(sessionId);
+        batch.update(sessionRef, {
+          'currentPlayerId': session.getNextPlayerId(),
+          'lastMoveImage': imagePath,
+        });
 
-    batch.update(sessionRef, {
-      'currentPlayerId': session.getNextPlayerId(),
-      'lastMoveImage': imagePath, // Also store in session for quick access
-    });
-
-    await batch.commit();
+        await batch.commit();
+      },
+    );
   }
 
   Stream<QuerySnapshot> getGameSessions() {
-    return _firestore
-        .collection('game_sessions')
-        .orderBy('startTime', descending: true)
-        .snapshots();
+    return FirebaseErrorHandler.wrapStream(
+      operation: 'get_game_sessions',
+      streamAction: () => _firestore
+          .collection('game_sessions')
+          .orderBy('startTime', descending: true)
+          .snapshots(),
+    );
   }
 
-  // Delete a session and all its subcollections
   Future<void> deleteSession(String sessionId) async {
-    // Delete moves subcollection
-    final movesSnapshot = await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .get();
+    return FirebaseErrorHandler.wrap(
+      operation: 'delete_session',
+      action: () async {
+        final movesSnapshot = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .get();
 
-    final batch = _firestore.batch();
-
-    for (var doc in movesSnapshot.docs) {
-      batch.delete(doc.reference);
-    }
-
-    // Delete main session document
-    batch.delete(_firestore.collection('game_sessions').doc(sessionId));
-
-    await batch.commit();
+        final batch = _firestore.batch();
+        for (var doc in movesSnapshot.docs) {
+          batch.delete(doc.reference);
+        }
+        batch.delete(_firestore.collection('game_sessions').doc(sessionId));
+        await batch.commit();
+      },
+    );
   }
 
-  // Get remaining letters
   Future<int> getRemainingLetters(String sessionId) async {
-    final doc = await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('game_state')
-        .doc('letters')
-        .get();
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_remaining_letters',
+      action: () async {
+        final doc = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('game_state')
+            .doc('letters')
+            .get();
 
-    if (!doc.exists) {
-      return 0;
-    }
+        if (!doc.exists) {
+          return 0;
+        }
 
-    final data = doc.data() as Map<String, dynamic>;
-    return data['remaining'] ?? 0;
+        final data = doc.data() as Map<String, dynamic>;
+        return data['remaining'] ?? 0;
+      },
+    );
   }
 
-  // Update the board state with new tiles
-  Future<void> updateBoardState(
-      String sessionId, List<Map<String, dynamic>> tiles) async {
-    final batch = _firestore.batch();
-    final boardRef = _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('board_state')
-        .doc('current');
+  Future<void> updateBoardState(String sessionId, List<Map<String, dynamic>> tiles) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_board_state',
+      action: () async {
+        final batch = _firestore.batch();
+        final boardRef = _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('board_state')
+            .doc('current');
 
-    // Get current board state
-    final currentState = await boardRef.get();
-    Map<String, dynamic> currentData = currentState.data() ?? {};
+        final currentState = await boardRef.get();
+        Map<String, dynamic> currentData = currentState.data() ?? {};
 
-    // Update with new tiles
-    for (var tile in tiles) {
-      String key = '${tile['row']}-${tile['col']}';
-      currentData[key] = {
-        'letter': tile['letter'],
-        'points': tile['points'],
-        'playerId': tile['playerId'],
-      };
-    }
+        for (var tile in tiles) {
+          String key = '${tile['row']}-${tile['col']}';
+          currentData[key] = {
+            'letter': tile['letter'],
+            'points': tile['points'],
+            'playerId': tile['playerId'],
+          };
+        }
 
-    batch.set(boardRef, currentData, SetOptions(merge: true));
-    await batch.commit();
+        batch.set(boardRef, currentData, SetOptions(merge: true));
+        await batch.commit();
+      },
+    );
   }
 
-// Update the session with the last move's image path
   Future<void> updateSessionImage(String sessionId, String imagePath) async {
-    await _firestore.collection('game_sessions').doc(sessionId).update({
-      'lastMoveImage': imagePath,
-    });
+    return FirebaseErrorHandler.wrap(
+      operation: 'update_session_image',
+      action: () async {
+        await _firestore.collection('game_sessions').doc(sessionId).update({
+          'lastMoveImage': imagePath,
+        });
+      },
+    );
+  }
+
+  Future<Move?> getLastMove(String sessionId) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_last_move',
+      action: () async {
+        final querySnapshot = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .orderBy('timestamp', descending: true)
+            .limit(1)
+            .get();
+
+        if (querySnapshot.docs.isEmpty) {
+          return null;
+        }
+
+        return Move.fromJson(querySnapshot.docs.first.data());
+      },
+    );
+  }
+
+  Future<void> switchCurrentPlayer(String sessionId, String playerId) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'switch_current_player',
+      action: () async {
+        await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .update({'currentPlayerId': playerId});
+      },
+    );
+  }
+
+  Future<int> getMoveCount(String sessionId) async {
+    return FirebaseErrorHandler.wrap(
+      operation: 'get_move_count',
+      action: () async {
+        final movesSnapshot = await _firestore
+            .collection('game_sessions')
+            .doc(sessionId)
+            .collection('moves')
+            .count()
+            .get();
+
+        return movesSnapshot.count ?? 0;
+      },
+    );
   }
 
   GameSession _parseSessionDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final timestamp = data['startTime'] as Timestamp;
 
-    // Get moves from the document if they exist
     List<Move> moves = [];
     if (data['moves'] != null) {
       moves = (data['moves'] as List)
@@ -344,44 +426,5 @@ class FirebaseService {
       currentPlayerId: data['currentPlayerId'] ?? 'p1',
       moves: moves,
     );
-  }
-
-  Future<Move?> getLastMove(String sessionId) async {
-    try {
-      final querySnapshot = await _firestore
-          .collection('game_sessions')
-          .doc(sessionId)
-          .collection('moves')
-          .orderBy('timestamp', descending: true)
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isEmpty) {
-        return null;
-      }
-
-      return Move.fromJson(querySnapshot.docs.first.data());
-    } catch (e) {
-      print('Error getting last move: $e');
-      return null;
-    }
-  }
-
-  Future<void> switchCurrentPlayer(String sessionId, String playerId) async {
-    await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .update({'currentPlayerId': playerId});
-  }
-
-    Future<int> getMoveCount(String sessionId) async {
-    final movesSnapshot = await _firestore
-        .collection('game_sessions')
-        .doc(sessionId)
-        .collection('moves')
-        .count()
-        .get();
-    
-    return movesSnapshot.count ?? 0;
   }
 }
