@@ -1,6 +1,7 @@
 // lib/src/screens/game_monitoring_screen.dart
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_moderator_app/src/services/qr_service.dart';
+import 'package:oloodi_scrabble_moderator_app/src/widgets/recognition_metrics_viewer.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
 import '../widgets/move_history_widget.dart';
@@ -28,6 +29,19 @@ class GameMonitoringScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.stop),
             onPressed: () => _endGame(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.analytics),
+            onPressed: () => showDialog(
+              context: context,
+              builder: (_) => Dialog(
+                child: SizedBox(
+                  width: 400,
+                  height: 600,
+                  child: MetricsViewer(sessionId: sessionId),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -61,7 +75,7 @@ class GameMonitoringScreen extends StatelessWidget {
                     onPlayer1Selected: () => _selectPlayer(context, 'p1'),
                     onPlayer2Selected: () => _selectPlayer(context, 'p2'),
                   ),
-                  
+
                   // Move history
                   const Expanded(
                     child: MoveHistoryWidget(),
@@ -85,7 +99,7 @@ class GameMonitoringScreen extends StatelessWidget {
       // Get the current session
       final provider = context.read<GameSessionProvider>();
       final session = provider.currentSession;
-      
+
       if (session == null) {
         throw Exception('No active session');
       }
@@ -94,11 +108,12 @@ class GameMonitoringScreen extends StatelessWidget {
       if (session.currentPlayerId != playerId) {
         // Update current player
         await provider.switchCurrentPlayer(playerId);
-        
+
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Switched to ${playerId == 'p1' ? 'Player 1' : 'Player 2'}\'s turn'),
+              content: Text(
+                  'Switched to ${playerId == 'p1' ? 'Player 1' : 'Player 2'}\'s turn'),
             ),
           );
         }

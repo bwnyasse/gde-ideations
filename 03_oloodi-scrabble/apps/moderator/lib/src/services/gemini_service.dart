@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import '../config/env_config.dart';
+import 'package:firebase_vertexai/firebase_vertexai.dart';
 import '../services/firebase_service.dart';
 
 class GeminiService {
@@ -11,17 +10,8 @@ class GeminiService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
   GeminiService() {
-    _model = GenerativeModel(
-      model: 'gemini-1.5-pro',
-      apiKey: 'AIzaSyAMRHzq6_i_jVDUfxOooscv5riCNIxqyXQ',
-      generationConfig: GenerationConfig(
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 8192,
-        responseMimeType: 'text/plain',
-      ),
-    );
+    _model =
+        FirebaseVertexAI.instance.generativeModel(model: 'gemini-2.0-flash-exp');
   }
 
   Future<String> _uploadImageToStorage(
@@ -150,7 +140,10 @@ class GeminiService {
 
   String _constructInitialBoardPrompt() {
     return '''
-You are analyzing an initial Scrabble board image. Identify all visible letters and their positions.
+You are analyzing an image of an initial Scrabble board move. The image is clear and well-lit. 
+Accurately identify all visible letters and their precise positions on the board, using the center star 
+as a reference point. It is crucial that the letter positions are identified correctly.
+Determine the word played and its score, including any applicable board multipliers.
 
 Return ONLY a JSON object in exactly this format:
 {
@@ -165,6 +158,7 @@ Return ONLY a JSON object in exactly this format:
 }
 
 Rules:
+
 - Use 0-based indices (0-14) for rows and columns
 - Include ONLY placed letters, ignore empty squares
 - All coordinates must be within the 15x15 grid
@@ -174,8 +168,10 @@ Rules:
 
   String _constructImageComparisonPrompt(Map<String, dynamic> previousState) {
     return '''
-Compare these two Scrabble board images: the first is the previous state, the second is the current state.
+Compare these two Scrabble board images: the first is the previous state before a move, the second is the current state after a move.
 Identify ONLY the letters that appear in the second image but not in the first.
+
+Determine the word played and its score, including any applicable board multipliers.
 
 Previous board state for reference:
 ${jsonEncode(previousState)}
@@ -195,10 +191,12 @@ Return ONLY a JSON object in exactly this format:
 }
 
 Rules:
-- Compare the images to find ONLY new letters
 - Calculate score including board multipliers
+- Calculate the score based on the tile values and any board multipliers active during the play. Do not include the 50-point bonus for using all 7 tiles.
 - Return ONLY the JSON, no explanatory text
 - Use 0-based indices (0-14) for coordinates
+- All coordinates must be within the 15x15 grid
+- If no valid word was played (e.g., the board states are identical), return: {"word": "", "score": 0, "newLetters": []}
 ''';
   }
 

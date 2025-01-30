@@ -13,7 +13,6 @@ dependencies:
   provider: ^6.1.1
   firebase_core: ^2.32.0
   cloud_firestore: ^4.13.6
-  google_generative_ai: ^0.4.6
   camera: ^0.10.5+9
   qr_flutter: ^4.1.0
   path_provider: ^2.1.5
@@ -24,6 +23,7 @@ dependencies:
   firebase_storage: ^11.6.5
   json_annotation: ^4.9.0
   image_cropper: ^8.1.0
+  firebase_vertexai: ^0.1.0
 
 dev_dependencies:
   flutter_test:

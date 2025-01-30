@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/recognition_metrics_service.dart';
 import 'package:oloodi_scrabble_moderator_app/src/widgets/board_overlay_painter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -107,7 +108,9 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   }
 
   Future<void> _captureAndAnalyze() async {
-    if (_processing || _controller == null || !_controller!.value.isInitialized) {
+    if (_processing ||
+        _controller == null ||
+        !_controller!.value.isInitialized) {
       return;
     }
 
@@ -120,13 +123,15 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       // Show capturing status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Capturing image...'), duration: Duration(seconds: 1)),
+          const SnackBar(
+              content: Text('Capturing image...'),
+              duration: Duration(seconds: 1)),
         );
       }
 
       // Capture image
       final image = await _controller!.takePicture();
-      
+
       // Crop image
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: image.path,
@@ -157,7 +162,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       // Get current session details
       final gameState = context.read<GameSessionProvider>();
       final session = gameState.currentSession;
-      
+
       if (session == null) {
         throw Exception('No active session');
       }
@@ -165,7 +170,9 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       // Show analyzing status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Analyzing board...'), duration: Duration(seconds: 2)),
+          const SnackBar(
+              content: Text('Analyzing board...'),
+              duration: Duration(seconds: 2)),
         );
       }
 
@@ -197,10 +204,10 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-              
+
           word = tiles.map((t) => t['letter']).join();
           score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
-          
+
           await gameState.updateBoardState(session.id, tiles);
         } else {
           tiles = (analysis['data']['newLetters'] as List)
@@ -211,7 +218,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-          
+
           word = analysis['data']['word'] as String;
           score = analysis['data']['score'] as int;
         }
@@ -257,45 +264,268 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     int score,
     List<Map<String, dynamic>> tiles,
   ) {
+    final metricsService = RecognitionMetricsService();
+    // Store original tiles for comparison
+    final originalTiles = List<Map<String, dynamic>>.from(tiles);
+    List<Map<String, dynamic>> editableTiles = List.from(tiles);
+    bool hasBeenEdited = false;
+
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Move'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Word: $word'),
-            const SizedBox(height: 8),
-            Text('Score: $score points'),
-            if (tiles.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Text('Tiles placed:'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (var tile in tiles)
-                    Chip(
-                      label: Text('${tile['letter']} (${tile['points']})'),
-                    ),
+                  Text('Confirm Move: $word'),
+                  Text(
+                    'Score: $score points',
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
                 ],
               ),
-            ],
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Please verify the detected tiles:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    ...editableTiles.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final tile = entry.value;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Tile ${index + 1}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit),
+                                    onPressed: () => _showTileEditor(
+                                      context,
+                                      tile,
+                                      (updatedTile) {
+                                        setState(() {
+                                          editableTiles[index] = updatedTile;
+                                          hasBeenEdited = true;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Letter: ${tile['letter']}'),
+                                  Text('Points: ${tile['points']}'),
+                                ],
+                              ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Row: ${tile['row']}'),
+                                  Text('Col: ${tile['col']}'),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    if (hasBeenEdited) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Manual corrections have been made. This will help improve future recognition.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Retake'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    // Store accuracy metrics if edited
+                    if (hasBeenEdited) {
+                      try {
+                        final gameState = context.read<GameSessionProvider>();
+                        final session = gameState.currentSession;
+
+                        if (session != null) {
+                          final correctedTiles =
+                              editableTiles.asMap().entries.where((entry) {
+                            final original = originalTiles[entry.key];
+                            final corrected = entry.value;
+                            return original['letter'] != corrected['letter'] ||
+                                original['points'] != corrected['points'] ||
+                                original['row'] != corrected['row'] ||
+                                original['col'] != corrected['col'];
+                          }).length;
+
+                          final metrics = RecognitionMetrics(
+                            sessionId: session.id,
+                            moveId: DateTime.now()
+                                .millisecondsSinceEpoch
+                                .toString(),
+                            totalTiles: originalTiles.length,
+                            correctedTiles: correctedTiles,
+                            originalValues: {
+                              'tiles': originalTiles,
+                              'word': word,
+                              'score': score,
+                            },
+                            correctedValues: {
+                              'tiles': editableTiles,
+                              'word':
+                                  word, // You might want to update this based on corrections
+                              'score':
+                                  score, // You might want to recalculate this
+                            },
+                            timestamp: DateTime.now(),
+                          );
+
+                          await metricsService.saveMetrics(metrics);
+                        }
+                      } catch (e) {
+                        print('Error saving recognition metrics: $e');
+                        // Don't block the move confirmation for metrics errors
+                      }
+                    }
+
+                    Navigator.pop(context, true);
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.green,
+                  ),
+                  child: const Text('Confirm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showTileEditor(
+    BuildContext context,
+    Map<String, dynamic> tile,
+    Function(Map<String, dynamic>) onUpdate,
+  ) {
+    final letterController = TextEditingController(text: tile['letter']);
+    final pointsController =
+        TextEditingController(text: tile['points'].toString());
+    final rowController = TextEditingController(text: tile['row'].toString());
+    final colController = TextEditingController(text: tile['col'].toString());
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Tile'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: letterController,
+                  decoration: const InputDecoration(labelText: 'Letter'),
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 1,
+                ),
+                TextField(
+                  controller: pointsController,
+                  decoration: const InputDecoration(labelText: 'Points'),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: rowController,
+                  decoration: const InputDecoration(
+                    labelText: 'Row',
+                    helperText: 'Valid range: 0-14',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: colController,
+                  decoration: const InputDecoration(
+                    labelText: 'Column',
+                    helperText: 'Valid range: 0-14',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                // Validate input
+                final row = int.tryParse(rowController.text);
+                final col = int.tryParse(colController.text);
+                final points = int.tryParse(pointsController.text);
+
+                if (letterController.text.isEmpty ||
+                    row == null ||
+                    row < 0 ||
+                    row > 14 ||
+                    col == null ||
+                    col < 0 ||
+                    col > 14 ||
+                    points == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter valid values'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                onUpdate({
+                  'letter': letterController.text.toUpperCase(),
+                  'points': points,
+                  'row': row,
+                  'col': col,
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Retake'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
