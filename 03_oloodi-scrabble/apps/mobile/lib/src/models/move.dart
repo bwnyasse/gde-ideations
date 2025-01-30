@@ -1,4 +1,6 @@
+// lib/src/models/move.dart
 import 'package:json_annotation/json_annotation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 part 'move.g.dart';
 
@@ -19,6 +21,25 @@ class Move {
   });
 
   factory Move.fromJson(Map<String, dynamic> json) => _$MoveFromJson(json);
+  
+  factory Move.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Move(
+      word: data['word'] ?? '',
+      score: data['score'] ?? 0,
+      tiles: (data['tiles'] as List<dynamic>?)
+          ?.map((tile) => PlacedTile(
+                letter: tile['letter'],
+                row: tile['row'],
+                col: tile['col'],
+                points: tile['points'],
+              ))
+          .toList() ?? [],
+      playerId: data['playerId'] ?? '',
+      timestamp: (data['timestamp'] as Timestamp).toDate(),
+    );
+  }
+
   Map<String, dynamic> toJson() => _$MoveToJson(this);
 }
 

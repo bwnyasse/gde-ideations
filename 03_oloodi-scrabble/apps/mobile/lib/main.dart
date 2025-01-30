@@ -1,9 +1,9 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/screens/game_sessions_list_screen.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:provider/provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
-import 'package:oloodi_scrabble_end_user_app/src/screens/home_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
@@ -27,8 +27,8 @@ class ScrabbleAIApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Oloodi Scrabble Companion',
         theme: AppTheme.theme,
-        debugShowCheckedModeBanner: false, // Remove debug banner
-        home: const HomeScreen(),
+        debugShowCheckedModeBanner: false,
+        home: const GameSessionsListScreen(),
       ),
     );
   }

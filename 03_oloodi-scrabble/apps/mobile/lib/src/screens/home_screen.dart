@@ -150,16 +150,30 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const Divider(color: Colors.white24),
             _buildActionButton(
-                icon: Icons.update,
-                label: 'Update Board',
+                icon: Icons.refresh,
+                label: 'Refresh Board',
                 onPressed: gameState.isGameOver
                     ? null
                     : () async {
-                        // To sync board state
                         try {
                           await gameState.updateBoard();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Board refreshed successfully'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
                         } catch (e) {
-                          // Handle error
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error refreshing board: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
                         }
                       }),
             _buildActionButton(
@@ -189,21 +203,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? () => _showMoveExplanation(gameState.lastMove!)
                   : null,
             ),
-            _buildActionButton(
-                icon: Icons.refresh,
-                label: 'Restart Game',
-                onPressed: () async {
-                  // For future restart functionality
-                  try {
-                    await gameState.restartGame();
-                  } catch (e) {
-                    if (e is UnimplementedError) {
-                      // Show "Coming soon" message
-                    } else {
-                      // Handle other errors
-                    }
-                  }
-                }),
           ],
         );
       },
