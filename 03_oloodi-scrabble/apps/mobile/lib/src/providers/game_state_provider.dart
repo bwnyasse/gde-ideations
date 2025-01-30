@@ -179,18 +179,43 @@ class GameStateProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Helper method to add moves
+// Helper method to add moves
   void _addMove(Move move) {
     _moves.add(move);
 
+    // Store existing tiles before placing new ones
+    Map<String, Tile> existingTiles = {};
+    for (int row = 0; row < 15; row++) {
+      for (int col = 0; col < 15; col++) {
+        if (_board[row][col].tile != null) {
+          String key = '${row}-${col}';
+          existingTiles[key] = _board[row][col].tile!;
+        }
+      }
+    }
+
+    // Place new tiles
     for (var tile in move.tiles) {
+      String key = '${tile.row}-${tile.col}';
       _board[tile.row][tile.col].tile = Tile(
         letter: tile.letter,
         points: tile.points,
         playerId: move.playerId,
         isNew: true,
       );
+      // Remove from existing tiles if we just overwrote it
+      existingTiles.remove(key);
     }
+
+    // Restore existing tiles that weren't overwritten
+    existingTiles.forEach((key, tile) {
+      final coords = key.split('-');
+      final row = int.parse(coords[0]);
+      final col = int.parse(coords[1]);
+      if (_board[row][col].tile == null) {
+        _board[row][col].tile = tile;
+      }
+    });
 
     notifyListeners();
 
