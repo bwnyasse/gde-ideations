@@ -224,7 +224,8 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         }
 
         // Show confirmation dialog
-        final confirmed = await _showMoveConfirmation(context, word, score, tiles);
+        final confirmed =
+            await _showMoveConfirmation(context, word, score, tiles);
 
         if (confirmed == true && mounted) {
           // Add move to session

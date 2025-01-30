@@ -1,6 +1,7 @@
 // lib/src/screens/game_monitoring_screen.dart
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_moderator_app/src/services/qr_service.dart';
+import 'package:oloodi_scrabble_moderator_app/src/themes/app_theme.dart';
 import 'package:oloodi_scrabble_moderator_app/src/widgets/recognition_metrics_viewer.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
@@ -20,30 +21,7 @@ class GameMonitoringScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Game Monitoring'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code),
-            onPressed: () => _showQRCode(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.stop),
-            onPressed: () => _endGame(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.analytics),
-            onPressed: () => showDialog(
-              context: context,
-              builder: (_) => Dialog(
-                child: SizedBox(
-                  width: 400,
-                  height: 600,
-                  child: MetricsViewer(sessionId: sessionId),
-                ),
-              ),
-            ),
-          ),
-        ],
+        title: const Text('Oloodi Scrabble Monitoring'),
       ),
       body: FutureBuilder<void>(
         future: context.read<GameSessionProvider>().loadSession(sessionId),
@@ -86,11 +64,45 @@ class GameMonitoringScreen extends StatelessWidget {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _captureMove(context),
-        icon: const Icon(Icons.camera_alt),
-        label: const Text('Capture Move'),
-      ),
+      bottomNavigationBar: _buildBottomNavigationBar(context),
+    );
+  }
+
+  Widget _buildBottomNavigationBar(BuildContext context) {
+    return BottomNavigationBar(
+      items: <BottomNavigationBarItem>[
+        BottomNavigationBarItem(
+            icon: IconButton(
+              icon: const Icon(Icons.camera_alt),
+              onPressed: () => _captureMove(context),
+            ),
+            label: 'Capture Move'),
+        BottomNavigationBarItem(
+            icon: IconButton(
+              icon: const Icon(Icons.stop),
+              onPressed: () => _endGame(context),
+            ),
+            label: 'End Game'),
+        BottomNavigationBarItem(
+            icon: IconButton(
+              icon: const Icon(Icons.analytics),
+              onPressed: () => showDialog(
+                context: context,
+                builder: (_) => Dialog(
+                  child: SizedBox(
+                    width: 400,
+                    height: 600,
+                    child: MetricsViewer(sessionId: sessionId),
+                  ),
+                ),
+              ),
+            ),
+            label: 'Analytics'),
+      ],
+      currentIndex: 0,
+      selectedItemColor: AppTheme.accentColor,
+      unselectedItemColor: Colors.white54,
+      onTap: (index) {},
     );
   }
 
