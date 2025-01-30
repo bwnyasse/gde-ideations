@@ -514,11 +514,73 @@ class GameSession {
   String getNextPlayerId() => currentPlayerId == 'p1' ? 'p2' : 'p1';
   Move? get lastMove => moves.isNotEmpty ? moves.last : null;
 }```\n
+\n### src/models/board_square.dart\n
+```dart
+// lib/src/models/board_square.dart
+enum SquareType {
+  normal,
+  doubleLetter,
+  tripleLetter,
+  doubleWord,
+  tripleWord,
+  center
+}
+
+class BoardSquare {
+  final int row;
+  final int col;
+  final SquareType type;
+  Map<String, dynamic>? tile;
+
+  BoardSquare({
+    required this.row,
+    required this.col,
+    required this.type,
+    this.tile,
+  });
+
+  // Convert from string type (used in Firebase) to SquareType
+  static SquareType typeFromString(String type) {
+    switch (type) {
+      case 'tripleWord':
+        return SquareType.tripleWord;
+      case 'doubleWord':
+        return SquareType.doubleWord;
+      case 'tripleLetter':
+        return SquareType.tripleLetter;
+      case 'doubleLetter':
+        return SquareType.doubleLetter;
+      case 'center':
+        return SquareType.center;
+      default:
+        return SquareType.normal;
+    }
+  }
+
+  // Convert from SquareType to string (for Firebase)
+  static String typeToString(SquareType type) {
+    switch (type) {
+      case SquareType.tripleWord:
+        return 'tripleWord';
+      case SquareType.doubleWord:
+        return 'doubleWord';
+      case SquareType.tripleLetter:
+        return 'tripleLetter';
+      case SquareType.doubleLetter:
+        return 'doubleLetter';
+      case SquareType.center:
+        return 'center';
+      default:
+        return 'normal';
+    }
+  }
+}```\n
 \n### src/screens/game_monitoring_screen.dart\n
 ```dart
 // lib/src/screens/game_monitoring_screen.dart
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_moderator_app/src/services/qr_service.dart';
+import 'package:oloodi_scrabble_moderator_app/src/widgets/recognition_metrics_viewer.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
 import '../widgets/move_history_widget.dart';
@@ -546,6 +608,19 @@ class GameMonitoringScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.stop),
             onPressed: () => _endGame(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.analytics),
+            onPressed: () => showDialog(
+              context: context,
+              builder: (_) => Dialog(
+                child: SizedBox(
+                  width: 400,
+                  height: 600,
+                  child: MetricsViewer(sessionId: sessionId),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -579,7 +654,7 @@ class GameMonitoringScreen extends StatelessWidget {
                     onPlayer1Selected: () => _selectPlayer(context, 'p1'),
                     onPlayer2Selected: () => _selectPlayer(context, 'p2'),
                   ),
-                  
+
                   // Move history
                   const Expanded(
                     child: MoveHistoryWidget(),
@@ -603,7 +678,7 @@ class GameMonitoringScreen extends StatelessWidget {
       // Get the current session
       final provider = context.read<GameSessionProvider>();
       final session = provider.currentSession;
-      
+
       if (session == null) {
         throw Exception('No active session');
       }
@@ -612,11 +687,12 @@ class GameMonitoringScreen extends StatelessWidget {
       if (session.currentPlayerId != playerId) {
         // Update current player
         await provider.switchCurrentPlayer(playerId);
-        
+
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Switched to ${playerId == 'p1' ? 'Player 1' : 'Player 2'}\'s turn'),
+              content: Text(
+                  'Switched to ${playerId == 'p1' ? 'Player 1' : 'Player 2'}\'s turn'),
             ),
           );
         }
@@ -683,7 +759,8 @@ class GameMonitoringScreen extends StatelessWidget {
       );
     }
   }
-}```\n
+}
+```\n
 \n### src/screens/game_sessions_list_screen.dart\n
 ```dart
 // lib/src/screens/game_sessions_list_screen.dart
@@ -975,6 +1052,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/recognition_metrics_service.dart';
 import 'package:oloodi_scrabble_moderator_app/src/widgets/board_overlay_painter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -1079,7 +1157,9 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   }
 
   Future<void> _captureAndAnalyze() async {
-    if (_processing || _controller == null || !_controller!.value.isInitialized) {
+    if (_processing ||
+        _controller == null ||
+        !_controller!.value.isInitialized) {
       return;
     }
 
@@ -1092,13 +1172,15 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       // Show capturing status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Capturing image...'), duration: Duration(seconds: 1)),
+          const SnackBar(
+              content: Text('Capturing image...'),
+              duration: Duration(seconds: 1)),
         );
       }
 
       // Capture image
       final image = await _controller!.takePicture();
-      
+
       // Crop image
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: image.path,
@@ -1129,7 +1211,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       // Get current session details
       final gameState = context.read<GameSessionProvider>();
       final session = gameState.currentSession;
-      
+
       if (session == null) {
         throw Exception('No active session');
       }
@@ -1137,7 +1219,9 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
       // Show analyzing status
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Analyzing board...'), duration: Duration(seconds: 2)),
+          const SnackBar(
+              content: Text('Analyzing board...'),
+              duration: Duration(seconds: 2)),
         );
       }
 
@@ -1169,10 +1253,10 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-              
+
           word = tiles.map((t) => t['letter']).join();
           score = tiles.fold(0, (sum, tile) => sum + (tile['points'] as int));
-          
+
           await gameState.updateBoardState(session.id, tiles);
         } else {
           tiles = (analysis['data']['newLetters'] as List)
@@ -1183,13 +1267,13 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     'points': tile['points'],
                   })
               .toList();
-          
+
           word = analysis['data']['word'] as String;
           score = analysis['data']['score'] as int;
         }
 
         // Show confirmation dialog
-        final confirmed = await _showMoveConfirmation(word, score, tiles);
+        final confirmed = await _showMoveConfirmation(context, word, score, tiles);
 
         if (confirmed == true && mounted) {
           // Add move to session
@@ -1225,49 +1309,305 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   }
 
   Future<bool?> _showMoveConfirmation(
+    BuildContext context,
     String word,
     int score,
     List<Map<String, dynamic>> tiles,
   ) {
+    final originalTiles = List<Map<String, dynamic>>.from(tiles);
+    List<Map<String, dynamic>> editableTiles = List.from(tiles);
+    bool hasBeenEdited = false;
+
+    // Determine word orientation from tiles
+    bool isHorizontal = tiles.length > 1
+        ? tiles[0]['row'] == tiles[1]['row']
+        : true; // Default to horizontal for single letter
+
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Move'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Word: $word'),
-            const SizedBox(height: 8),
-            Text('Score: $score points'),
-            if (tiles.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Text('Tiles placed:'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (var tile in tiles)
-                    Chip(
-                      label: Text('${tile['letter']} (${tile['points']})'),
-                    ),
+                  Text('Confirm Move: $word'),
+                  Text(
+                    'Score: $score points',
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
                 ],
               ),
-            ],
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Starting position editor
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: tiles.first['row'].toString(),
+                            decoration: const InputDecoration(
+                              labelText: 'Starting Row',
+                              helperText: 'Range: 0-14',
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) {
+                              final newRow = int.tryParse(value);
+                              if (newRow != null &&
+                                  newRow >= 0 &&
+                                  newRow < 15) {
+                                setState(() {
+                                  hasBeenEdited = true;
+                                  _recalculatePositions(
+                                    editableTiles,
+                                    startRow: newRow,
+                                    startCol: editableTiles.first['col'],
+                                    isHorizontal: isHorizontal,
+                                  );
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: tiles.first['col'].toString(),
+                            decoration: const InputDecoration(
+                              labelText: 'Starting Column',
+                              helperText: 'Range: 0-14',
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) {
+                              final newCol = int.tryParse(value);
+                              if (newCol != null &&
+                                  newCol >= 0 &&
+                                  newCol < 15) {
+                                setState(() {
+                                  hasBeenEdited = true;
+                                  _recalculatePositions(
+                                    editableTiles,
+                                    startRow: editableTiles.first['row'],
+                                    startCol: newCol,
+                                    isHorizontal: isHorizontal,
+                                  );
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Orientation toggle
+                    Row(
+                      children: [
+                        const Text('Orientation:'),
+                        const SizedBox(width: 16),
+                        ToggleButtons(
+                          isSelected: [isHorizontal, !isHorizontal],
+                          onPressed: (index) {
+                            final newIsHorizontal = index == 0;
+                            if (newIsHorizontal != isHorizontal) {
+                              setState(() {
+                                isHorizontal = newIsHorizontal;
+                                hasBeenEdited = true;
+                                _recalculatePositions(
+                                  editableTiles,
+                                  startRow: editableTiles.first['row'],
+                                  startCol: editableTiles.first['col'],
+                                  isHorizontal: newIsHorizontal,
+                                );
+                              });
+                            }
+                          },
+                          children: const [
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('Horizontal'),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('Vertical'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Preview of tiles
+                    const Text(
+                      'Tile Positions:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ...editableTiles.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final tile = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '${tile['letter']}: Row ${tile['row']}, Col ${tile['col']}',
+                          style: const TextStyle(fontFamily: 'monospace'),
+                        ),
+                      );
+                    }),
+
+                    if (hasBeenEdited) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Manual corrections have been made',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Retake'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (hasBeenEdited) {
+                      // Save recognition metrics if needed
+                    }
+                    Navigator.pop(context, true);
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.green,
+                  ),
+                  child: const Text('Confirm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _recalculatePositions(
+    List<Map<String, dynamic>> tiles, {
+    required int startRow,
+    required int startCol,
+    required bool isHorizontal,
+  }) {
+    for (int i = 0; i < tiles.length; i++) {
+      if (isHorizontal) {
+        tiles[i]['row'] = startRow;
+        tiles[i]['col'] = startCol + i;
+      } else {
+        tiles[i]['row'] = startRow + i;
+        tiles[i]['col'] = startCol;
+      }
+    }
+  }
+
+  Future<void> _showTileEditor(
+    BuildContext context,
+    Map<String, dynamic> tile,
+    Function(Map<String, dynamic>) onUpdate,
+  ) {
+    final letterController = TextEditingController(text: tile['letter']);
+    final pointsController =
+        TextEditingController(text: tile['points'].toString());
+    final rowController = TextEditingController(text: tile['row'].toString());
+    final colController = TextEditingController(text: tile['col'].toString());
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Tile'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: letterController,
+                  decoration: const InputDecoration(labelText: 'Letter'),
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 1,
+                ),
+                TextField(
+                  controller: pointsController,
+                  decoration: const InputDecoration(labelText: 'Points'),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: rowController,
+                  decoration: const InputDecoration(
+                    labelText: 'Row',
+                    helperText: 'Valid range: 0-14',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: colController,
+                  decoration: const InputDecoration(
+                    labelText: 'Column',
+                    helperText: 'Valid range: 0-14',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                // Validate input
+                final row = int.tryParse(rowController.text);
+                final col = int.tryParse(colController.text);
+                final points = int.tryParse(pointsController.text);
+
+                if (letterController.text.isEmpty ||
+                    row == null ||
+                    row < 0 ||
+                    row > 14 ||
+                    col == null ||
+                    col < 0 ||
+                    col > 14 ||
+                    points == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter valid values'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                onUpdate({
+                  'letter': letterController.text.toUpperCase(),
+                  'points': points,
+                  'row': row,
+                  'col': col,
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Retake'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1509,6 +1849,118 @@ class AppTheme {
   );
 }
 ```\n
+\n### src/services/recognition_metrics_service.dart\n
+```dart
+// lib/src/services/recognition_metrics_service.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class RecognitionMetrics {
+  final String sessionId;
+  final String moveId;
+  final int totalTiles;
+  final int correctedTiles;
+  final Map<String, dynamic> originalValues;
+  final Map<String, dynamic> correctedValues;
+  final DateTime timestamp;
+
+  RecognitionMetrics({
+    required this.sessionId,
+    required this.moveId,
+    required this.totalTiles,
+    required this.correctedTiles,
+    required this.originalValues,
+    required this.correctedValues,
+    required this.timestamp,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'sessionId': sessionId,
+    'moveId': moveId,
+    'totalTiles': totalTiles,
+    'correctedTiles': correctedTiles,
+    'accuracyRate': (totalTiles - correctedTiles) / totalTiles,
+    'originalValues': originalValues,
+    'correctedValues': correctedValues,
+    'timestamp': Timestamp.fromDate(timestamp),
+  };
+}
+
+class RecognitionMetricsService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Future<void> saveMetrics(RecognitionMetrics metrics) async {
+    try {
+      // Store in a subcollection under the game session
+      await _firestore
+          .collection('game_sessions')
+          .doc(metrics.sessionId)
+          .collection('recognition_metrics')
+          .add(metrics.toJson());
+      
+      // Also store in a global metrics collection for easier analysis
+      await _firestore
+          .collection('recognition_metrics')
+          .add(metrics.toJson());
+    } catch (e) {
+      print('Error saving recognition metrics: $e');
+      rethrow;
+    }
+  }
+
+  // Get metrics for a specific session
+  Future<List<RecognitionMetrics>> getSessionMetrics(String sessionId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('game_sessions')
+          .doc(sessionId)
+          .collection('recognition_metrics')
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return RecognitionMetrics(
+          sessionId: data['sessionId'],
+          moveId: data['moveId'],
+          totalTiles: data['totalTiles'],
+          correctedTiles: data['correctedTiles'],
+          originalValues: data['originalValues'],
+          correctedValues: data['correctedValues'],
+          timestamp: (data['timestamp'] as Timestamp).toDate(),
+        );
+      }).toList();
+    } catch (e) {
+      print('Error getting session metrics: $e');
+      rethrow;
+    }
+  }
+
+  // Get overall accuracy statistics
+  Future<Map<String, dynamic>> getOverallStats() async {
+    try {
+      final snapshot = await _firestore
+          .collection('recognition_metrics')
+          .get();
+
+      final metrics = snapshot.docs.map((doc) => doc.data()).toList();
+      
+      final totalMoves = metrics.length;
+      final totalAccuracy = metrics.fold<double>(
+        0,
+        (sum, metric) => sum + metric['accuracyRate'],
+      );
+
+      return {
+        'totalMoves': totalMoves,
+        'averageAccuracy': totalMoves > 0 ? totalAccuracy / totalMoves : 0,
+        'lastUpdated': DateTime.now(),
+      };
+    } catch (e) {
+      print('Error getting overall stats: $e');
+      rethrow;
+    }
+  }
+}```\n
 \n### src/services/firebase_service.dart\n
 ```dart
 // lib/src/services/firebase_service.dart
@@ -1899,13 +2351,118 @@ class FirebaseService {
   }
 }
 ```\n
+\n### src/services/board_validator.dart\n
+```dart
+// lib/src/services/board_validator.dart
+import '../models/board_square.dart';
+
+class ValidationResult {
+  final bool isValid;
+  final String? error;
+  final bool connectsToExisting;
+  final List<String> formedWords;
+
+  ValidationResult({
+    required this.isValid,
+    this.error,
+    required this.connectsToExisting,
+    this.formedWords = const [],
+  });
+}
+
+class BoardValidator {
+  static ValidationResult validateMove({
+    required List<Map<String, dynamic>> newTiles,
+    required List<List<BoardSquare>> currentBoard,
+    required bool isFirstMove,
+  }) {
+    // Check if tiles are within board bounds
+    for (var tile in newTiles) {
+      if (tile['row'] < 0 ||
+          tile['row'] >= 15 ||
+          tile['col'] < 0 ||
+          tile['col'] >= 15) {
+        return ValidationResult(
+          isValid: false,
+          error: 'Word placement extends beyond board boundaries',
+          connectsToExisting: false,
+        );
+      }
+    }
+
+    // Check if first move uses center square
+    if (isFirstMove) {
+      bool usesCenterSquare =
+          newTiles.any((tile) => tile['row'] == 7 && tile['col'] == 7);
+      if (!isFirstMove) {
+        return ValidationResult(
+          isValid: false,
+          error: 'First move must use the center square',
+          connectsToExisting: false,
+        );
+      }
+    }
+
+    // Check for tile conflicts and connections
+    bool connectsToExisting = false;
+    List<String> formedWords = [];
+
+    for (var tile in newTiles) {
+      final row = tile['row'] as int;
+      final col = tile['col'] as int;
+
+      // Check for conflicts with existing tiles
+      if (currentBoard[row][col].tile != null) {
+        if (currentBoard[row][col].tile!['letter'] != tile['letter']) {
+          return ValidationResult(
+            isValid: false,
+            error: 'Conflict with existing tile at row $row, col $col',
+            connectsToExisting: false,
+          );
+        }
+      }
+
+      // Check for adjacent tiles (if not first move)
+      if (!isFirstMove) {
+        final directions = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+        for (var (dRow, dCol) in directions) {
+          final newRow = row + dRow;
+          final newCol = col + dCol;
+
+          if (newRow >= 0 && newRow < 15 && newCol >= 0 && newCol < 15) {
+            if (currentBoard[newRow][newCol].tile != null) {
+              connectsToExisting = true;
+              // Could collect formed words here
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // After first move, must connect to existing tiles
+    if (!isFirstMove && !connectsToExisting) {
+      return ValidationResult(
+        isValid: false,
+        error: 'New word must connect to existing tiles',
+        connectsToExisting: false,
+      );
+    }
+
+    return ValidationResult(
+      isValid: true,
+      connectsToExisting: connectsToExisting,
+      formedWords: formedWords,
+    );
+  }
+}
+```\n
 \n### src/services/gemini_service.dart\n
 ```dart
 import 'dart:convert';
 import 'dart:io';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import '../config/env_config.dart';
+import 'package:firebase_vertexai/firebase_vertexai.dart';
 import '../services/firebase_service.dart';
 
 class GeminiService {
@@ -1914,17 +2471,8 @@ class GeminiService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
   GeminiService() {
-    _model = GenerativeModel(
-      model: 'gemini-1.5-pro',
-      apiKey: 'AIzaSyAMRHzq6_i_jVDUfxOooscv5riCNIxqyXQ',
-      generationConfig: GenerationConfig(
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 8192,
-        responseMimeType: 'text/plain',
-      ),
-    );
+    _model =
+        FirebaseVertexAI.instance.generativeModel(model: 'gemini-2.0-flash-exp');
   }
 
   Future<String> _uploadImageToStorage(
@@ -2053,7 +2601,10 @@ class GeminiService {
 
   String _constructInitialBoardPrompt() {
     return '''
-You are analyzing an initial Scrabble board image. Identify all visible letters and their positions.
+You are analyzing an image of an initial Scrabble board move. The image is clear and well-lit. 
+Accurately identify all visible letters and their precise positions on the board, using the center star 
+as a reference point. It is crucial that the letter positions are identified correctly.
+Determine the word played and its score, including any applicable board multipliers.
 
 Return ONLY a JSON object in exactly this format:
 {
@@ -2068,6 +2619,7 @@ Return ONLY a JSON object in exactly this format:
 }
 
 Rules:
+
 - Use 0-based indices (0-14) for rows and columns
 - Include ONLY placed letters, ignore empty squares
 - All coordinates must be within the 15x15 grid
@@ -2077,8 +2629,10 @@ Rules:
 
   String _constructImageComparisonPrompt(Map<String, dynamic> previousState) {
     return '''
-Compare these two Scrabble board images: the first is the previous state, the second is the current state.
+Compare these two Scrabble board images: the first is the previous state before a move, the second is the current state after a move.
 Identify ONLY the letters that appear in the second image but not in the first.
+
+Determine the word played and its score, including any applicable board multipliers.
 
 Previous board state for reference:
 ${jsonEncode(previousState)}
@@ -2098,10 +2652,12 @@ Return ONLY a JSON object in exactly this format:
 }
 
 Rules:
-- Compare the images to find ONLY new letters
 - Calculate score including board multipliers
+- Calculate the score based on the tile values and any board multipliers active during the play. Do not include the 50-point bonus for using all 7 tiles.
 - Return ONLY the JSON, no explanatory text
 - Use 0-based indices (0-14) for coordinates
+- All coordinates must be within the 15x15 grid
+- If no valid word was played (e.g., the board states are identical), return: {"word": "", "score": 0, "newLetters": []}
 ''';
   }
 
@@ -2119,6 +2675,110 @@ Rules:
   }
 }
 ```\n
+\n### src/services/score_calculator.dart\n
+```dart
+// lib/src/services/score_calculator.dart
+import '../models/board_square.dart';
+
+class ScoreCalculator {
+  // French Scrabble letter points
+  static const Map<String, int> letterPoints = {
+    'A': 1, 'B': 3, 'C': 3, 'D': 2, 'E': 1,
+    'F': 4, 'G': 2, 'H': 4, 'I': 1, 'J': 8,
+    'K': 10, 'L': 1, 'M': 2, 'N': 1, 'O': 1,
+    'P': 3, 'Q': 8, 'R': 1, 'S': 1, 'T': 1,
+    'U': 1, 'V': 4, 'W': 10, 'X': 10, 'Y': 10,
+    'Z': 10, '*': 0, // Blank tiles worth 0 points
+  };
+
+  static SquareType getSquareType(int row, int col) {
+    // Center square
+    if (row == 7 && col == 7) {
+      return SquareType.doubleWord;
+    }
+
+    // Triple Word Score
+    if ((row == 0 || row == 14) && (col == 0 || col == 7 || col == 14) ||
+        (row == 7 && (col == 0 || col == 14))) {
+      return SquareType.tripleWord;
+    }
+
+    // Double Word Score
+    if (row == col || row + col == 14) {
+      if (row >= 1 && row <= 5 || row >= 9 && row <= 13) {
+        return SquareType.doubleWord;
+      }
+    }
+
+    // Triple Letter Score
+    if ((row == 1 || row == 13) && (col == 5 || col == 9) ||
+        (row == 5 || row == 9) &&
+            (col == 1 || col == 5 || col == 9 || col == 13)) {
+      return SquareType.tripleLetter;
+    }
+
+    // Double Letter Score
+    if ((row == 3 || row == 11) && (col == 0 || col == 7 || col == 14) ||
+        (row == 6 || row == 8) && (col == 2 || col == 6 || col == 8 || col == 12) ||
+        (row == 0 || row == 7 || col == 14) && (col == 3 || col == 11)) {
+      return SquareType.doubleLetter;
+    }
+
+    return SquareType.normal;
+  }
+
+  static int calculateScore(List<Map<String, dynamic>> tiles, {bool isFirstMove = false}) {
+    int wordScore = 0;
+    int wordMultiplier = 1;
+    bool usedCenter = false;
+
+    // Calculate base score with letter multipliers
+    for (var tile in tiles) {
+      int letterScore = letterPoints[tile['letter']] ?? 0;
+      final squareType = getSquareType(tile['row'], tile['col']);
+
+      // Check if using center square
+      if (tile['row'] == 7 && tile['col'] == 7) {
+        usedCenter = true;
+      }
+
+      // Apply letter multipliers
+      switch (squareType) {
+        case SquareType.doubleLetter:
+          letterScore *= 2;
+          break;
+        case SquareType.tripleLetter:
+          letterScore *= 3;
+          break;
+        case SquareType.doubleWord:
+          wordMultiplier *= 2;
+          break;
+        case SquareType.tripleWord:
+          wordMultiplier *= 3;
+          break;
+        default:
+          break;
+      }
+
+      wordScore += letterScore;
+    }
+
+    // Apply word multiplier
+    wordScore *= wordMultiplier;
+
+    // First move must use center square and gets double word score
+    if (isFirstMove && usedCenter) {
+      wordScore *= 2;
+    }
+
+    // Add Scrabble bonus (50 points) if all 7 letters are used
+    if (tiles.length == 7) {
+      wordScore += 50;
+    }
+
+    return wordScore;
+  }
+}```\n
 \n### src/services/qr_service.dart\n
 ```dart
 // lib/src/services/qr_service.dart
@@ -2732,6 +3392,241 @@ class PlayerInfoWidget extends StatelessWidget {
 \n### src/widgets/camera_overlay_widget.dart\n
 ```dart
 ```\n
+\n### src/widgets/recognition_metrics_viewer.dart\n
+```dart
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/recognition_metrics_service.dart';
+
+class MetricsViewer extends StatelessWidget {
+  final String sessionId;
+  final RecognitionMetricsService _metricsService = RecognitionMetricsService();
+
+  MetricsViewer({super.key, required this.sessionId});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<RecognitionMetrics>>(
+      future: _metricsService.getSessionMetrics(sessionId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        final metrics = snapshot.data ?? [];
+        if (metrics.isEmpty) {
+          return const Center(child: Text('No recognition metrics available'));
+        }
+
+        final totalAccuracy = metrics.fold<double>(
+          0,
+          (sum, metric) =>
+              sum +
+              ((metric.totalTiles - metric.correctedTiles) / metric.totalTiles),
+        );
+        final averageAccuracy = totalAccuracy / metrics.length;
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Recognition Accuracy: ${(averageAccuracy * 100).toStringAsFixed(1)}%',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                Text('Total Moves: ${metrics.length}'),
+                Text(
+                    'Total Corrections: ${metrics.fold<int>(0, (sum, m) => sum + m.correctedTiles)}'),
+                const SizedBox(height: 16),
+                const Text('Recent Corrections:'),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: metrics.length,
+                    itemBuilder: (context, index) {
+                      final metric = metrics[index];
+                      return ListTile(
+                        title: Text('Move ${index + 1}'),
+                        subtitle: Text(
+                          'Accuracy: ${((metric.totalTiles - metric.correctedTiles) / metric.totalTiles * 100).toStringAsFixed(1)}% '
+                          '(${metric.correctedTiles} corrections)',
+                        ),
+                        trailing: Text(
+                          DateFormat.yMd().add_jm().format(metric.timestamp),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+```\n
+\n### src/widgets/board_preview_widget_2.dart\n
+```dart
+// lib/src/widgets/board_preview_widget.dart
+import 'package:flutter/material.dart';
+import '../models/board_square.dart';
+import '../services/score_calculator.dart';
+
+class BoardPreviewWidget extends StatelessWidget {
+  final List<Map<String, dynamic>> newTiles;
+  final List<List<BoardSquare>> currentBoard;
+  final bool isFirstMove;
+
+  const BoardPreviewWidget({
+    super.key,
+    required this.newTiles,
+    required this.currentBoard,
+    required this.isFirstMove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 300,
+      height: 300,
+      child: GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 15,
+          childAspectRatio: 1,
+        ),
+        itemCount: 225,
+        itemBuilder: (context, index) {
+          final row = index ~/ 15;
+          final col = index % 15;
+          
+          // Find if there's a new tile at this position
+          final newTile = newTiles.firstWhere(
+            (tile) => tile['row'] == row && tile['col'] == col,
+            orElse: () => {'letter': null},
+          );
+
+          // Get existing tile
+          final existingTile = currentBoard[row][col].tile;
+          
+          // Get square type
+          final squareType = ScoreCalculator.getSquareType(row, col);
+          
+          return _buildSquare(
+            context,
+            row: row,
+            col: col,
+            squareType: squareType,
+            newTile: newTile['letter'] != null ? newTile : null,
+            existingTile: existingTile,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSquare(
+    BuildContext context, {
+    required int row,
+    required int col,
+    required SquareType squareType,
+    Map<String, dynamic>? newTile,
+    dynamic existingTile,
+  }) {
+    final isNewTilePlacement = newTile != null;
+    final hasExistingTile = existingTile != null;
+    
+    Color getBackgroundColor() {
+      if (isNewTilePlacement) return Colors.yellow[100]!;
+      if (hasExistingTile) return Colors.brown[100]!;
+      
+      switch (squareType) {
+        case SquareType.tripleWord:
+          return Colors.red[100]!;
+        case SquareType.doubleWord:
+          return Colors.pink[50]!;
+        case SquareType.tripleLetter:
+          return Colors.blue[100]!;
+        case SquareType.doubleLetter:
+          return Colors.lightBlue[50]!;
+        default:
+          return Colors.white;
+      }
+    }
+
+    String getMultiplierLabel() {
+      switch (squareType) {
+        case SquareType.tripleWord:
+          return 'TW';
+        case SquareType.doubleWord:
+          return 'DW';
+        case SquareType.tripleLetter:
+          return 'TL';
+        case SquareType.doubleLetter:
+          return 'DL';
+        default:
+          return '';
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: getBackgroundColor(),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Stack(
+        children: [
+          if (!isNewTilePlacement && !hasExistingTile && getMultiplierLabel().isNotEmpty)
+            Center(
+              child: Text(
+                getMultiplierLabel(),
+                style: TextStyle(
+                  fontSize: 8,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+          if (isNewTilePlacement || hasExistingTile)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: isNewTilePlacement ? Colors.yellow : Colors.brown[200],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  isNewTilePlacement ? newTile!['letter'] : existingTile.letter,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: isNewTilePlacement ? Colors.black : Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          if (row == 7 && col == 7 && !hasExistingTile && !isNewTilePlacement)
+            const Center(
+              child: Text(
+                '★',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.pink,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}```\n
 \n## pubspec.yaml\n
 ```yaml
 name: oloodi_scrabble_moderator_app
@@ -2749,7 +3644,6 @@ dependencies:
   provider: ^6.1.1
   firebase_core: ^2.32.0
   cloud_firestore: ^4.13.6
-  google_generative_ai: ^0.4.6
   camera: ^0.10.5+9
   qr_flutter: ^4.1.0
   path_provider: ^2.1.5
@@ -2760,6 +3654,7 @@ dependencies:
   firebase_storage: ^11.6.5
   json_annotation: ^4.9.0
   image_cropper: ^8.1.0
+  firebase_vertexai: ^0.1.0
 
 dev_dependencies:
   flutter_test:

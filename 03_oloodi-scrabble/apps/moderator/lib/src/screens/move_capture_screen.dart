@@ -224,7 +224,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         }
 
         // Show confirmation dialog
-        final confirmed = await _showMoveConfirmation(word, score, tiles);
+        final confirmed = await _showMoveConfirmation(context, word, score, tiles);
 
         if (confirmed == true && mounted) {
           // Add move to session
@@ -260,15 +260,19 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
   }
 
   Future<bool?> _showMoveConfirmation(
+    BuildContext context,
     String word,
     int score,
     List<Map<String, dynamic>> tiles,
   ) {
-    final metricsService = RecognitionMetricsService();
-    // Store original tiles for comparison
     final originalTiles = List<Map<String, dynamic>>.from(tiles);
     List<Map<String, dynamic>> editableTiles = List.from(tiles);
     bool hasBeenEdited = false;
+
+    // Determine word orientation from tiles
+    bool isHorizontal = tiles.length > 1
+        ? tiles[0]['row'] == tiles[1]['row']
+        : true; // Default to horizontal for single letter
 
     return showDialog<bool>(
       context: context,
@@ -292,69 +296,125 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Please verify the detected tiles:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    // Starting position editor
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: tiles.first['row'].toString(),
+                            decoration: const InputDecoration(
+                              labelText: 'Starting Row',
+                              helperText: 'Range: 0-14',
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) {
+                              final newRow = int.tryParse(value);
+                              if (newRow != null &&
+                                  newRow >= 0 &&
+                                  newRow < 15) {
+                                setState(() {
+                                  hasBeenEdited = true;
+                                  _recalculatePositions(
+                                    editableTiles,
+                                    startRow: newRow,
+                                    startCol: editableTiles.first['col'],
+                                    isHorizontal: isHorizontal,
+                                  );
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: tiles.first['col'].toString(),
+                            decoration: const InputDecoration(
+                              labelText: 'Starting Column',
+                              helperText: 'Range: 0-14',
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) {
+                              final newCol = int.tryParse(value);
+                              if (newCol != null &&
+                                  newCol >= 0 &&
+                                  newCol < 15) {
+                                setState(() {
+                                  hasBeenEdited = true;
+                                  _recalculatePositions(
+                                    editableTiles,
+                                    startRow: editableTiles.first['row'],
+                                    startCol: newCol,
+                                    isHorizontal: isHorizontal,
+                                  );
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
+
+                    // Orientation toggle
+                    Row(
+                      children: [
+                        const Text('Orientation:'),
+                        const SizedBox(width: 16),
+                        ToggleButtons(
+                          isSelected: [isHorizontal, !isHorizontal],
+                          onPressed: (index) {
+                            final newIsHorizontal = index == 0;
+                            if (newIsHorizontal != isHorizontal) {
+                              setState(() {
+                                isHorizontal = newIsHorizontal;
+                                hasBeenEdited = true;
+                                _recalculatePositions(
+                                  editableTiles,
+                                  startRow: editableTiles.first['row'],
+                                  startCol: editableTiles.first['col'],
+                                  isHorizontal: newIsHorizontal,
+                                );
+                              });
+                            }
+                          },
+                          children: const [
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('Horizontal'),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('Vertical'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Preview of tiles
+                    const Text(
+                      'Tile Positions:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
                     ...editableTiles.asMap().entries.map((entry) {
                       final index = entry.key;
                       final tile = entry.value;
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Tile ${index + 1}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit),
-                                    onPressed: () => _showTileEditor(
-                                      context,
-                                      tile,
-                                      (updatedTile) {
-                                        setState(() {
-                                          editableTiles[index] = updatedTile;
-                                          hasBeenEdited = true;
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('Letter: ${tile['letter']}'),
-                                  Text('Points: ${tile['points']}'),
-                                ],
-                              ),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('Row: ${tile['row']}'),
-                                  Text('Col: ${tile['col']}'),
-                                ],
-                              ),
-                            ],
-                          ),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '${tile['letter']}: Row ${tile['row']}, Col ${tile['col']}',
+                          style: const TextStyle(fontFamily: 'monospace'),
                         ),
                       );
-                    }).toList(),
+                    }),
+
                     if (hasBeenEdited) ...[
                       const SizedBox(height: 16),
                       const Text(
-                        'Manual corrections have been made. This will help improve future recognition.',
+                        'Manual corrections have been made',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.orange,
@@ -372,53 +432,9 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                 ),
                 TextButton(
                   onPressed: () async {
-                    // Store accuracy metrics if edited
                     if (hasBeenEdited) {
-                      try {
-                        final gameState = context.read<GameSessionProvider>();
-                        final session = gameState.currentSession;
-
-                        if (session != null) {
-                          final correctedTiles =
-                              editableTiles.asMap().entries.where((entry) {
-                            final original = originalTiles[entry.key];
-                            final corrected = entry.value;
-                            return original['letter'] != corrected['letter'] ||
-                                original['points'] != corrected['points'] ||
-                                original['row'] != corrected['row'] ||
-                                original['col'] != corrected['col'];
-                          }).length;
-
-                          final metrics = RecognitionMetrics(
-                            sessionId: session.id,
-                            moveId: DateTime.now()
-                                .millisecondsSinceEpoch
-                                .toString(),
-                            totalTiles: originalTiles.length,
-                            correctedTiles: correctedTiles,
-                            originalValues: {
-                              'tiles': originalTiles,
-                              'word': word,
-                              'score': score,
-                            },
-                            correctedValues: {
-                              'tiles': editableTiles,
-                              'word':
-                                  word, // You might want to update this based on corrections
-                              'score':
-                                  score, // You might want to recalculate this
-                            },
-                            timestamp: DateTime.now(),
-                          );
-
-                          await metricsService.saveMetrics(metrics);
-                        }
-                      } catch (e) {
-                        print('Error saving recognition metrics: $e');
-                        // Don't block the move confirmation for metrics errors
-                      }
+                      // Save recognition metrics if needed
                     }
-
                     Navigator.pop(context, true);
                   },
                   style: TextButton.styleFrom(
@@ -432,6 +448,23 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         );
       },
     );
+  }
+
+  void _recalculatePositions(
+    List<Map<String, dynamic>> tiles, {
+    required int startRow,
+    required int startCol,
+    required bool isHorizontal,
+  }) {
+    for (int i = 0; i < tiles.length; i++) {
+      if (isHorizontal) {
+        tiles[i]['row'] = startRow;
+        tiles[i]['col'] = startCol + i;
+      } else {
+        tiles[i]['row'] = startRow + i;
+        tiles[i]['col'] = startCol;
+      }
+    }
   }
 
   Future<void> _showTileEditor(
