@@ -72,11 +72,13 @@ class DefaultFirebaseOptions {
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/screens/game_sessions_list_screen.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:provider/provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -84,9 +86,21 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-    // Make sure to add this line
+  // Make sure to add this line
   await dotenv.load(fileName: ".env");
-  runApp(const ScrabbleAIApp());
+
+  // Initialize SharedPreferences
+  final prefs = await SharedPreferences.getInstance();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => GameStateProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider(prefs)),
+      ],
+      child: const ScrabbleAIApp(),
+    ),
+  );
 }
 
 class ScrabbleAIApp extends StatelessWidget {
@@ -94,13 +108,14 @@ class ScrabbleAIApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => GameStateProvider()),
       ],
       child: MaterialApp(
         title: 'Oloodi Scrabble Companion',
-        theme: AppTheme.theme,
+        theme: AppTheme.getThemeData(settings.themeMode),
         debugShowCheckedModeBanner: false,
         home: const GameSessionsListScreen(),
       ),
@@ -523,6 +538,121 @@ class GameStateProvider with ChangeNotifier {
       _isPlaying = false;
       notifyListeners();
       throw Exception('Failed to play move explanation: $e');
+    }
+  }
+}
+```\n
+\n### src/providers/settings_provider.dart\n
+```dart
+// lib/src/providers/settings_provider.dart
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+enum LLMProvider { gemini, claude, deepseek, o3 }
+
+enum VoiceSynthesisProvider { cloudTts, elevenLabs }
+
+enum AppThemeMode { dark, light, nature }
+
+class SettingsProvider with ChangeNotifier {
+  final SharedPreferences _prefs;
+
+  // Default values
+  LLMProvider _llmProvider = LLMProvider.gemini;
+  VoiceSynthesisProvider _voiceProvider = VoiceSynthesisProvider.cloudTts;
+  AppThemeMode _themeMode = AppThemeMode.dark;
+  String _selectedVoice = 'Mason';
+
+  // Keys for SharedPreferences
+  static const String _llmProviderKey = 'llm_provider';
+  static const String _voiceProviderKey = 'voice_provider';
+  static const String _themeModeKey = 'theme_mode';
+  static const String _selectedVoiceKey = 'selected_voice';
+
+  SettingsProvider(this._prefs) {
+    _loadSettings();
+  }
+
+  // Getters
+  LLMProvider get llmProvider => _llmProvider;
+  VoiceSynthesisProvider get voiceProvider => _voiceProvider;
+  AppThemeMode get themeMode => _themeMode;
+  String get selectedVoice => _selectedVoice;
+
+  // Load settings from SharedPreferences
+  void _loadSettings() {
+    final llmIndex = _prefs.getInt(_llmProviderKey);
+    if (llmIndex != null) {
+      _llmProvider = LLMProvider.values[llmIndex];
+    }
+
+    final voiceProviderIndex = _prefs.getInt(_voiceProviderKey);
+    if (voiceProviderIndex != null) {
+      _voiceProvider = VoiceSynthesisProvider.values[voiceProviderIndex];
+    }
+
+    final themeModeIndex = _prefs.getInt(_themeModeKey);
+    if (themeModeIndex != null) {
+      _themeMode = AppThemeMode.values[themeModeIndex];
+    }
+
+    _selectedVoice = _prefs.getString(_selectedVoiceKey) ?? _selectedVoice;
+  }
+
+  // Setters with persistence
+  Future<void> setLLMProvider(LLMProvider provider) async {
+    _llmProvider = provider;
+    await _prefs.setInt(_llmProviderKey, provider.index);
+    notifyListeners();
+  }
+
+  Future<void> setVoiceProvider(VoiceSynthesisProvider provider) async {
+    _voiceProvider = provider;
+    await _prefs.setInt(_voiceProviderKey, provider.index);
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(AppThemeMode mode) async {
+    _themeMode = mode;
+    await _prefs.setInt(_themeModeKey, mode.index);
+    notifyListeners();
+  }
+
+  Future<void> setSelectedVoice(String voice) async {
+    _selectedVoice = voice;
+    await _prefs.setString(_selectedVoiceKey, voice);
+    notifyListeners();
+  }
+
+  // Helper methods for UI
+  String getLLMProviderName(LLMProvider provider) {
+    switch (provider) {
+      case LLMProvider.gemini:
+        return 'Google Gemini';
+      case LLMProvider.claude:
+        return 'Anthropic Claude';
+      case LLMProvider.deepseek:
+        return 'DeepSeek';
+      case LLMProvider.o3:
+        return 'O3 AI';
+    }
+  }
+
+  String getVoiceProviderName(VoiceSynthesisProvider provider) {
+    switch (provider) {
+      case VoiceSynthesisProvider.cloudTts:
+        return 'Google Cloud TTS';
+      case VoiceSynthesisProvider.elevenLabs:
+        return 'ElevenLabs';
+    }
+  }
+
+  List<String> getAvailableVoices() {
+    switch (_voiceProvider) {
+      case VoiceSynthesisProvider.cloudTts:
+        return ['Mason', 'Grace', 'Alex', 'Sarah'];
+      case VoiceSynthesisProvider.elevenLabs:
+        return ['Rachel', 'Michael', 'Emily', 'Josh'];
     }
   }
 }
@@ -1086,9 +1216,9 @@ class GameSessionsListScreen extends StatelessWidget {
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
-import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/board_widget.dart';
-import 'package:oloodi_scrabble_end_user_app/src/widgets/player_score_card.dart';
+import 'package:oloodi_scrabble_end_user_app/src/widgets/left_menu.dart';
+import 'package:oloodi_scrabble_end_user_app/src/widgets/settings_panel.dart';
 import 'package:provider/provider.dart';
 
 import '../widgets/move_history_panel.dart';
@@ -1103,46 +1233,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showHistory = false;
   bool _showChat = false;
+  bool _showSettings = false;
 
-  Widget _buildMoveExplanationButton(GameStateProvider gameState) {
-    final lastMove = gameState.lastMove;
-    final isPlaying = gameState.isPlaying;
-
-    if (lastMove == null) {
-      return _buildActionButton(
-        icon: Icons.lightbulb_outline,
-        label: 'Move Explanations',
-        onPressed: null,
-      );
+  Future<void> _handleRefresh(GameStateProvider gameState) async {
+    try {
+      await gameState.updateBoard();
+      if (mounted) {
+        // TODO: Add a snow Snack Bar Message : Board refreshed successfully
+      }
+    } catch (e) {
+      if (mounted) {
+        // TODO: Add a snow Snack Bar Message : Error refreshing board
+      }
     }
-
-    return Column(
-      children: [
-        _buildActionButton(
-          icon: isPlaying
-              ? Icons.stop_circle_outlined
-              : Icons.play_circle_outlined,
-          label: isPlaying ? 'Stop Explanation' : 'Play Last Move',
-          isActive: isPlaying,
-          onPressed: () => _handleExplanationPlayback(gameState, lastMove),
-        ),
-        if (isPlaying)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              lastMove.word,
-              style: const TextStyle(
-                color: AppTheme.accentColor,
-                fontWeight: FontWeight.w500,
-                fontSize: 13,
-              ),
-            ),
-          ),
-      ],
-    );
   }
 
-  Future<void> _handleExplanationPlayback(
+  Future<void> _handleExplanationToggle(
       GameStateProvider gameState, Move move) async {
     try {
       await gameState.handleMoveExplanation(move);
@@ -1161,219 +1267,108 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Row(
-        children: [
-          // Left Sidebar
-          Container(
-            width: 250,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 5,
-                  offset: const Offset(3, 0),
-                ),
-              ],
+      body: Consumer<GameStateProvider>(builder: (context, gameState, _) {
+        return Row(
+          children: [
+            ResponsiveLeftMenu(
+              showHistory: _showHistory,
+              showChat: _showChat,
+              onHistoryToggle: (value) => setState(() => _showHistory = value),
+              onChatToggle: (value) => setState(() => _showChat = value),
+              onRefreshBoard: () => _handleRefresh(gameState),
+              onExplanationToggle: (move) =>
+                  _handleExplanationToggle(gameState, move),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // App Title
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        'assets/images/app_icon.png', // Add your app icon
-                        width: 32,
-                        height: 32,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                          Icons.sports_esports,
-                          size: 32,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Oloodi Scrabble\nAI Companion',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
+            // Main Content Area
+            Expanded(
+              child: Stack(
+                children: [
+                  // Board
+                  const Center(
+                    child: BoardWidget(),
                   ),
-                ),
-                const Divider(color: Colors.white24),
 
-                // Player Cards
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: _buildPlayerCards(),
-                ),
+                  // Settings Button
+                  Positioned(
+                    right: 16,
+                    top: 16,
+                    child: _buildSettingsButton(),
+                  ),
 
-                const Spacer(),
-
-                // Action Buttons
-                _buildActionButtons(),
-
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-
-          // Main Content Area
-          Expanded(
-            child: Stack(
-              children: [
-                // Board
-                const Center(
-                  child: BoardWidget(),
-                ),
-
-                // Move History Panel
-                if (_showHistory)
-                  const Positioned(
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: 300,
-                    child: Card(
-                      margin: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.horizontal(left: Radius.circular(12)),
+                  // Move History Panel
+                  if (_showHistory)
+                    const Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 300,
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.horizontal(
+                              left: Radius.circular(12)),
+                        ),
+                        child: MoveHistoryPanel(),
                       ),
-                      child: MoveHistoryPanel(),
                     ),
-                  ),
 
-                // Chat Overlay
-                if (_showChat) _buildChatOverlay(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                  // Settings Panel
+                  if (_showSettings)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      child: SettingsPanel(
+                        onClose: () => setState(() => _showSettings = false),
+                      ),
+                    ),
 
-  Widget _buildPlayerCards() {
-    return Consumer<GameStateProvider>(
-      builder: (context, gameState, child) {
-        return Column(
-          children: [
-            for (final player in gameState.players) ...[
-              PlayerScoreCard(
-                player: player,
-                score: gameState.getPlayerScore(player.id),
-                isCurrentPlayer: player.id == gameState.currentPlayerId,
+                  // Chat Overlay
+                  if (_showChat) _buildChatOverlay(context),
+                ],
               ),
-              const SizedBox(height: 12),
-            ],
+            ),
           ],
         );
-      },
+      }),
     );
   }
 
-  Widget _buildActionButtons() {
-    return Consumer<GameStateProvider>(
-      builder: (context, gameState, child) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Divider(color: Colors.white24),
-            _buildActionButton(
-                icon: Icons.refresh,
-                label: 'Refresh Board',
-                onPressed: gameState.isGameOver
-                    ? null
-                    : () async {
-                        try {
-                          await gameState.updateBoard();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Board refreshed successfully'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error refreshing board: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      }),
-            _buildActionButton(
-              icon: _showHistory ? Icons.history_toggle_off : Icons.history,
-              label: 'Move History',
-              isActive: _showHistory,
-              onPressed: () {
-                setState(() {
-                  _showHistory = !_showHistory;
-                });
-              },
+  Widget _buildSettingsButton() {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: 'Settings',
+        child: InkWell(
+          onTap: () => setState(() => _showSettings = !_showSettings),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _showSettings
+                  ? theme.colorScheme.tertiary.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _showSettings
+                    ? theme.colorScheme.tertiary
+                    : Colors.white.withOpacity(0.1),
+              ),
             ),
-            _buildActionButton(
-              icon: _showChat ? Icons.chat_bubble : Icons.chat_bubble_outline,
-              label: 'Chat',
-              isActive: _showChat,
-              onPressed: () {
-                setState(() {
-                  _showChat = !_showChat;
-                });
-              },
+            child: Icon(
+              Icons.settings,
+              color: _showSettings ? theme.colorScheme.tertiary : Colors.white,
+              size: 24,
             ),
-            _buildMoveExplanationButton(gameState),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onPressed,
-    bool isActive = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-      child: TextButton.icon(
-        icon: Icon(
-          icon,
-          color: isActive ? AppTheme.accentColor : Colors.white,
-        ),
-        label: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? AppTheme.accentColor : Colors.white,
-          ),
-        ),
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 16,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildChatOverlay() {
+  Widget _buildChatOverlay(context) {
+    final theme = Theme.of(context);
     return Positioned(
       right: 16,
       bottom: 16,
@@ -1386,12 +1381,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Column(
           children: [
-            // Chat header
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(
-                color: AppTheme.primaryColor,
-                borderRadius: BorderRadius.vertical(
+              decoration: BoxDecoration(
+                color: theme.primaryColor,
+                borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
               ),
@@ -1407,54 +1401,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () {
-                      setState(() {
-                        _showChat = false;
-                      });
-                    },
+                    onPressed: () => setState(() => _showChat = false),
                   ),
                 ],
               ),
             ),
-            // Chat messages area
             const Expanded(
-              child: Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Center(
-                  child: Text('Chat functionality coming soon...'),
-                ),
-              ),
-            ),
-            // Input area
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.mic),
-                    onPressed: () {
-                      // Implement voice input
-                    },
-                  ),
-                  const Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Type your message...',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: () {
-                      // Send message
-                    },
-                  ),
-                ],
+              child: Center(
+                child: Text('Chat functionality coming soon...'),
               ),
             ),
           ],
@@ -1769,122 +1723,417 @@ class AIService {
 ```\n
 \n### src/themes/app_themes.dart\n
 ```dart
-import 'package:flutter/material.dart';
+// lib/src/themes/app_themes.dart
 
-// Original
-class AppTheme123445 {
-  static const primaryColor = Color(0xFF1E4B5F);
-  static const secondaryColor = Color(0xFF3C7A89);
-  static const accentColor = Color(0xFFEBA63F);
-  static const backgroundColor = Color(0xFFF5F5F5);
+import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
+
+abstract class AppThemeBase {
+  // Abstract getters that all themes must implement
+  Color get primaryColor;
+  Color get secondaryColor;
+  Color get accentColor;
+  Color get backgroundColor;
   
-  static ThemeData get theme => ThemeData(
+  // Common theme data builder
+  ThemeData get theme => ThemeData(
     primaryColor: primaryColor,
     scaffoldBackgroundColor: backgroundColor,
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: primaryColor,
       elevation: 0,
       centerTitle: false,
-      iconTheme: IconThemeData(color: Colors.white),
-      titleTextStyle: TextStyle(
+      iconTheme: IconThemeData(color: accentColor),
+      titleTextStyle: const TextStyle(
         color: Colors.white,
         fontSize: 24,
         fontWeight: FontWeight.bold,
       ),
     ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: primaryColor,
       selectedItemColor: accentColor,
-      unselectedItemColor: Colors.white70,
+      unselectedItemColor: Colors.white54,
+    ),
+    // Add more common theme properties
+    cardColor: primaryColor,
+    dividerColor: Colors.white24,
+    colorScheme: ColorScheme.dark(
+      primary: primaryColor,
+      secondary: secondaryColor,
+      tertiary: accentColor,
+      background: backgroundColor,
     ),
   );
 }
 
 // Modern Dark Theme
-class AppTheme {
-  static const primaryColor = Color(0xFF1A1A2E);
-  static const secondaryColor = Color(0xFF16213E);
-  static const accentColor = Color(0xFF00FF95);
-  static const backgroundColor = Color(0xFF0F0F1A);
+class DarkTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFF1A1A2E);
   
-  static ThemeData get theme => ThemeData(
-    primaryColor: primaryColor,
-    scaffoldBackgroundColor: backgroundColor,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: primaryColor,
-      elevation: 0,
-      centerTitle: false,
-      iconTheme: IconThemeData(color: accentColor),
-      titleTextStyle: TextStyle(
-        color: Colors.white,
-        fontSize: 24,
-        fontWeight: FontWeight.bold,
-      ),
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: primaryColor,
-      selectedItemColor: accentColor,
-      unselectedItemColor: Colors.white54,
-    ),
-  );
+  @override
+  Color get secondaryColor => const Color(0xFF16213E);
+  
+  @override
+  Color get accentColor => const Color(0xFF00FF95);
+  
+  @override
+  Color get backgroundColor => const Color(0xFF0F0F1A);
 }
 
-// Minimal Light theme 
-class AppTheme12345 {
-  static const primaryColor = Color(0xFFF8F9FA);
-  static const secondaryColor = Color(0xFFE9ECEF);
-  static const accentColor = Color(0xFF6C63FF);
-  static const backgroundColor = Colors.white;
+// Light Theme
+class LightTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFFF8F9FA);
   
-  static ThemeData get theme => ThemeData(
+  @override
+  Color get secondaryColor => const Color(0xFFE9ECEF);
+  
+  @override
+  Color get accentColor => const Color(0xFF6C63FF);
+  
+  @override
+  Color get backgroundColor => Colors.white;
+
+  @override
+  ThemeData get theme => ThemeData(
     primaryColor: primaryColor,
     scaffoldBackgroundColor: backgroundColor,
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: primaryColor,
       elevation: 0,
       centerTitle: false,
       iconTheme: IconThemeData(color: accentColor),
-      titleTextStyle: TextStyle(
+      titleTextStyle: const TextStyle(
         color: Color(0xFF2D3436),
         fontSize: 24,
         fontWeight: FontWeight.bold,
       ),
     ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: primaryColor,
       selectedItemColor: accentColor,
-      unselectedItemColor: Color(0xFF95A5A6),
+      unselectedItemColor: const Color(0xFF95A5A6),
+    ),
+    cardColor: primaryColor,
+    dividerColor: Colors.black12,
+    colorScheme: ColorScheme.light(
+      primary: primaryColor,
+      secondary: secondaryColor,
+      tertiary: accentColor,
+      background: backgroundColor,
     ),
   );
 }
 
-// Natue-inspired Theme
-class AppTheme1234 {
-  static const primaryColor = Color(0xFF2D5A27);
-  static const secondaryColor = Color(0xFF4A8B3C);
-  static const accentColor = Color(0xFFFFC857);
-  static const backgroundColor = Color(0xFFF7F7F2);
+// Nature Theme
+class NatureTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFF2D5A27);
   
-  static ThemeData get theme => ThemeData(
-    primaryColor: primaryColor,
-    scaffoldBackgroundColor: backgroundColor,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: primaryColor,
-      elevation: 0,
-      centerTitle: false,
-      iconTheme: IconThemeData(color: Colors.white),
-      titleTextStyle: TextStyle(
-        color: Colors.white,
-        fontSize: 24,
-        fontWeight: FontWeight.bold,
+  @override
+  Color get secondaryColor => const Color(0xFF4A8B3C);
+  
+  @override
+  Color get accentColor => const Color(0xFFFFC857);
+  
+  @override
+  Color get backgroundColor => const Color(0xFFF7F7F2);
+}
+
+// Theme extensions for easy access to current theme colors
+extension ThemeExtension on ThemeData {
+  Color get primaryColor => colorScheme.primary;
+  Color get secondaryColor => colorScheme.secondary;
+  Color get accentColor => colorScheme.tertiary;
+  Color get backgroundColor => colorScheme.background;
+}
+
+// Static access to theme instances
+class AppTheme {
+  static final dark = DarkTheme();
+  static final light = LightTheme();
+  static final nature = NatureTheme();
+  
+  static ThemeData getThemeData(AppThemeMode mode) {
+    switch (mode) {
+      case AppThemeMode.dark:
+        return dark.theme;
+      case AppThemeMode.light:
+        return light.theme;
+      case AppThemeMode.nature:
+        return nature.theme;
+    }
+  }
+}```\n
+\n### src/widgets/left_menu.dart\n
+```dart
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/move.dart';
+import '../themes/app_themes.dart';
+import '../widgets/player_score_card.dart';
+import '../providers/game_state_provider.dart';
+
+class ResponsiveLeftMenu extends StatelessWidget {
+  final bool showHistory;
+  final bool showChat;
+  final Function(bool) onHistoryToggle;
+  final Function(bool) onChatToggle;
+  final Function() onRefreshBoard;
+  final Function(Move) onExplanationToggle;
+
+  const ResponsiveLeftMenu({
+    super.key,
+    required this.showHistory,
+    required this.showChat,
+    required this.onHistoryToggle,
+    required this.onChatToggle,
+    required this.onRefreshBoard,
+    required this.onExplanationToggle,
+  });
+// In ResponsiveLeftMenu class:
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final menuWidth = math.min(screenWidth * 0.25, 350.0);
+
+    return Container(
+      width: menuWidth,
+      decoration: BoxDecoration(
+        color: theme.primaryColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(3, 0),
+          ),
+        ],
       ),
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: primaryColor,
-      selectedItemColor: accentColor,
-      unselectedItemColor: Colors.white70,
-    ),
-  );
+      child: Column(
+        children: [
+          _buildHeader(context),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle(context, 'Players'),
+                  const SizedBox(height: 16),
+                  _buildPlayerCards(),
+                ],
+              ),
+            ),
+          ),
+          _buildActionRow(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.primaryColor.withOpacity(0.5),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: theme.accentColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.sports_esports,
+              color: theme.accentColor,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Oloodi Scrabble',
+                  style: TextStyle(
+                    color: theme.colorScheme.onPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
+                  ),
+                ),
+                Text(
+                  'AI Companion',
+                  style: TextStyle(
+                    color: theme.accentColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionRow(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Consumer<GameStateProvider>(
+      builder: (context, gameState, _) {
+        final lastMove = gameState.lastMove;
+        final isPlaying = gameState.isPlaying;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.primaryColor.withOpacity(0.5),
+            border: Border(
+              top: BorderSide(
+                color: theme.dividerColor,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildActionIcon(
+                context,
+                icon: Icons.refresh,
+                label: 'Refresh',
+                isEnabled: !gameState.isGameOver,
+                onTap: onRefreshBoard,
+              ),
+              _buildActionIcon(
+                context,
+                icon: showHistory ? Icons.history_toggle_off : Icons.history,
+                label: 'History',
+                isActive: showHistory,
+                onTap: () => onHistoryToggle(!showHistory),
+              ),
+              _buildActionIcon(
+                context,
+                icon: showChat ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                label: 'Chat',
+                isActive: showChat,
+                onTap: () => onChatToggle(!showChat),
+              ),
+              if (lastMove != null)
+                _buildActionIcon(
+                  context,
+                  icon: isPlaying
+                      ? Icons.stop_circle_outlined
+                      : Icons.play_circle_outlined,
+                  label: isPlaying ? 'Stop' : 'Play',
+                  isActive: isPlaying,
+                  onTap: () => onExplanationToggle(lastMove),
+                )
+              else
+                _buildActionIcon(
+                  context,
+                  icon: Icons.lightbulb_outline,
+                  label: 'Explain',
+                  isEnabled: false,
+                  onTap: null,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionIcon(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    bool isActive = false,
+    bool isEnabled = true,
+    VoidCallback? onTap,
+  }) {
+    final theme = Theme.of(context);
+
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: isEnabled ? onTap : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isActive
+                ? theme.accentColor.withOpacity(0.1)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isActive ? theme.accentColor : Colors.transparent,
+            ),
+          ),
+          child: Icon(
+            icon,
+            color: !isEnabled
+                ? theme.colorScheme.onPrimary.withOpacity(0.3)
+                : isActive
+                    ? theme.accentColor
+                    : theme.colorScheme.onPrimary.withOpacity(0.7),
+            size: 24,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    final theme = Theme.of(context);
+
+    return Text(
+      title.toUpperCase(),
+      style: TextStyle(
+        color: theme.colorScheme.onPrimary.withOpacity(0.6),
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.2,
+      ),
+    );
+  }
+
+  Widget _buildPlayerCards() {
+    return Consumer<GameStateProvider>(
+      builder: (context, gameState, child) {
+        return Column(
+          children: [
+            for (final player in gameState.players) ...[
+              PlayerScoreCard(
+                player: player,
+                score: gameState.getPlayerScore(player.id),
+                isCurrentPlayer: player.id == gameState.currentPlayerId,
+              ),
+              const SizedBox(height: 16),
+            ],
+          ],
+        );
+      },
+    );
+  }
 }
 ```\n
 \n### src/widgets/player_history_sheet.dart\n
@@ -2053,11 +2302,208 @@ class MoveHistoryPanel extends StatelessWidget {
   }
 }
 ```\n
+\n### src/widgets/move_explanation_controls.dart\n
+```dart
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
+import '../models/move_explanation.dart';
+
+class MoveExplanationControls extends StatefulWidget {
+  final MoveExplanation explanation;
+  final VoidCallback onClose;
+
+  const MoveExplanationControls({
+    super.key,
+    required this.explanation,
+    required this.onClose,
+  });
+
+  @override
+  State<MoveExplanationControls> createState() => _MoveExplanationControlsState();
+}
+
+class _MoveExplanationControlsState extends State<MoveExplanationControls> {
+  late AudioPlayer _audioPlayer;
+  bool _isPlaying = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAudioPlayer();
+  }
+
+  void _initAudioPlayer() {
+    _audioPlayer = AudioPlayer();
+    
+    _audioPlayer.onDurationChanged.listen((duration) {
+      if (mounted) setState(() => _duration = duration);
+    });
+
+    _audioPlayer.onPositionChanged.listen((position) {
+      if (mounted) setState(() => _position = position);
+    });
+
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _position = Duration.zero;
+        });
+      }
+    });
+  }
+
+  Future<void> _playPause() async {
+    if (widget.explanation.audioData == null) return;
+
+    if (_isPlaying) {
+      await _audioPlayer.pause();
+    } else {
+      if (_position == Duration.zero) {
+     await _audioPlayer.play(BytesSource(Uint8List.fromList(widget.explanation.audioData!)));
+      } else {
+        await _audioPlayer.resume();
+      }
+    }
+    
+    setState(() => _isPlaying = !_isPlaying);
+  }
+
+  Future<void> _seekTo(Duration position) async {
+    await _audioPlayer.seek(position);
+    setState(() => _position = position);
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.tertiary.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  _isPlaying ? Icons.pause_circle : Icons.play_circle,
+                  color: theme.colorScheme.tertiary,
+                  size: 32,
+                ),
+                onPressed: _playPause,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Move Explanation',
+                      style: TextStyle(
+                        color: theme.colorScheme.tertiary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          _formatDuration(_position),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 2,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6,
+                              ),
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 14,
+                              ),
+                              activeTrackColor: theme.colorScheme.tertiary,
+                              inactiveTrackColor: Colors.white24,
+                              thumbColor: theme.colorScheme.tertiary,
+                              overlayColor: theme.colorScheme.tertiary.withOpacity(0.2),
+                            ),
+                            child: Slider(
+                              min: 0,
+                              max: _duration.inMilliseconds.toDouble(),
+                              value: _position.inMilliseconds.toDouble(),
+                              onChanged: (value) {
+                                _seekTo(Duration(milliseconds: value.toInt()));
+                              },
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _formatDuration(_duration),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  _audioPlayer.stop();
+                  widget.onClose();
+                },
+                color: Colors.white70,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.explanation.text,
+            style: const TextStyle(color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+}```\n
 \n### src/widgets/player_score_card.dart\n
 ```dart
 import 'package:flutter/material.dart';
-import 'package:oloodi_scrabble_end_user_app/src/models/player.dart';
-import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
+import '../models/player.dart';
+import '../themes/app_themes.dart';
+
 class PlayerScoreCard extends StatelessWidget {
   final Player player;
   final int score;
@@ -2072,76 +2518,162 @@ class PlayerScoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
+    final theme = Theme.of(context);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: isCurrentPlayer
+            ? theme.colorScheme.tertiary.withOpacity(0.1)
+            : Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isCurrentPlayer ? AppTheme.accentColor : Colors.transparent,
+          color: isCurrentPlayer
+              ? theme.colorScheme.tertiary
+              : Colors.white.withOpacity(0.1),
+          width: isCurrentPlayer ? 2 : 1,
+        ),
+        boxShadow: [
+          if (isCurrentPlayer)
+            BoxShadow(
+              color: theme.colorScheme.tertiary.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _buildAvatar(context),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      player.displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: isCurrentPlayer
+                                ? theme.colorScheme.tertiary
+                                : Colors.white.withOpacity(0.3),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isCurrentPlayer ? 'Current Turn' : 'Waiting',
+                          style: TextStyle(
+                            color: isCurrentPlayer
+                                ? theme.colorScheme.tertiary
+                                : Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildScoreSection(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar(context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isCurrentPlayer
+              ? theme.accentColor
+              : Colors.white.withOpacity(0.2),
           width: 2,
         ),
       ),
+      child: ClipOval(
+        child: Image.asset(
+          player.imagePath,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              color: Colors.white.withOpacity(0.1),
+              child: Icon(
+                Icons.person,
+                color: isCurrentPlayer
+                    ? theme.accentColor
+                    : Colors.white.withOpacity(0.5),
+                size: 32,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScoreSection(context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Player image
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppTheme.accentColor,
-                width: 2,
-              ),
-            ),
-            child: ClipOval(
-              child: Image.asset(
-                player.imagePath,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.white24,
-                    child: const Icon(
-                      Icons.person,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  );
-                },
-              ),
+          Icon(
+            Icons.stars_rounded,
+            color: theme.accentColor,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$score',
+            style: TextStyle(
+              color: theme.accentColor,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  player.displayName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Score: $score',
-                  style: TextStyle(
-                    color: AppTheme.accentColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+          const SizedBox(width: 4),
+          Text(
+            'points',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
       ),
     );
   }
-}```\n
+}
+```\n
 \n### src/widgets/board_widget.dart\n
 ```dart
 // lib/widgets/board_widget.dart
@@ -2353,6 +2885,355 @@ Widget _buildTile(Tile tile, GameStateProvider gameState) {
     }
   }
 }```\n
+\n### src/widgets/settings_panel.dart\n
+```dart
+// lib/src/widgets/settings_panel.dart
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/settings_provider.dart';
+import '../themes/app_themes.dart';
+
+class SettingsPanel extends StatelessWidget {
+  final VoidCallback onClose;
+
+  const SettingsPanel({
+    super.key,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.horizontal(left: Radius.circular(12)),
+      ),
+      child: Container(
+        width: 400,
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLanguageModelSection(context),
+                    const SizedBox(height: 32),
+                    _buildVoiceSynthesisSection(context),
+                    const SizedBox(height: 32),
+                    _buildThemeSection(context),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.cardColor.withOpacity(0.5),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Settings',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: Icon(Icons.close, color: theme.colorScheme.onSurface),
+            onPressed: onClose,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLanguageModelSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = context.watch<SettingsProvider>();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, 'Language Model'),
+        const SizedBox(height: 16),
+        _buildSettingCard(
+          context,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Provider',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...LLMProvider.values.map((provider) => RadioListTile<LLMProvider>(
+                value: provider,
+                groupValue: settings.llmProvider,
+                onChanged: (value) => settings.setLLMProvider(value!),
+                title: Text(
+                  settings.getLLMProviderName(provider),
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                ),
+                activeColor: theme.colorScheme.tertiary,
+              )),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVoiceSynthesisSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = context.watch<SettingsProvider>();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, 'Voice Synthesis'),
+        const SizedBox(height: 16),
+        _buildSettingCard(
+          context,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Provider',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...VoiceSynthesisProvider.values.map((provider) => RadioListTile<VoiceSynthesisProvider>(
+                value: provider,
+                groupValue: settings.voiceProvider,
+                onChanged: (value) => settings.setVoiceProvider(value!),
+                title: Text(
+                  settings.getVoiceProviderName(provider),
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                ),
+                activeColor: theme.colorScheme.tertiary,
+              )),
+              Divider(color: theme.dividerColor),
+              const SizedBox(height: 8),
+              Text(
+                'Voice Selection',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: settings.selectedVoice,
+                dropdownColor: theme.cardColor,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: theme.dividerColor,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: theme.dividerColor,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: theme.colorScheme.tertiary,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                items: settings.getAvailableVoices().map((voice) {
+                  return DropdownMenuItem(
+                    value: voice,
+                    child: Text(
+                      voice,
+                      style: TextStyle(color: theme.colorScheme.onSurface),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) => settings.setSelectedVoice(value!),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThemeSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = context.watch<SettingsProvider>();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, 'Theme'),
+        const SizedBox(height: 16),
+        _buildSettingCard(
+          context,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Color Scheme',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: AppThemeMode.values.map((mode) {
+                  final isSelected = settings.themeMode == mode;
+                  final themeData = AppTheme.getThemeData(mode);
+                  final color = themeData.primaryColor;
+                  
+                  return InkWell(
+                    onTap: () => settings.setThemeMode(mode),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected ? theme.colorScheme.tertiary : color.withOpacity(0.3),
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                            ),
+                            child: isSelected
+                              ? Icon(
+                                  Icons.check,
+                                  color: theme.colorScheme.tertiary,
+                                  size: 20,
+                                )
+                              : null,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _getThemeName(mode),
+                            style: TextStyle(
+                              color: isSelected 
+                                ? theme.colorScheme.tertiary 
+                                : theme.colorScheme.onSurface,
+                              fontSize: 12,
+                              fontWeight: isSelected 
+                                ? FontWeight.bold 
+                                : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingCard(BuildContext context, {required Widget child}) {
+    final theme = Theme.of(context);
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.dividerColor,
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    final theme = Theme.of(context);
+    
+    return Text(
+      title.toUpperCase(),
+      style: TextStyle(
+        color: theme.colorScheme.onSurface.withOpacity(0.6),
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.2,
+      ),
+    );
+  }
+
+  String _getThemeName(AppThemeMode mode) {
+    switch (mode) {
+      case AppThemeMode.dark:
+        return 'Dark';
+      case AppThemeMode.light:
+        return 'Light';
+      case AppThemeMode.nature:
+        return 'Nature';
+    }
+  }
+}```\n
 \n## pubspec.yaml\n
 ```yaml
 name: oloodi_scrabble_end_user_app
@@ -2395,7 +3276,7 @@ dependencies:
   google_generative_ai: ^0.2.0
   
   # Storage and Database
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.5.1
   sqflite: ^2.3.2
   
   # Utils

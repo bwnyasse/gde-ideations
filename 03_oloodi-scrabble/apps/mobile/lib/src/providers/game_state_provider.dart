@@ -45,14 +45,14 @@ class GameStateProvider with ChangeNotifier {
 
   MoveExplanation? get currentExplanation => _currentExplanation;
 
-  String getPlayerNameById(String playerId) {
+  String getPlayerNameById(Color color, String playerId) {
     return _players
         .firstWhere(
           (player) => player.id == playerId,
           orElse: () => Player(
             id: playerId,
             displayName: 'Unknown Player',
-            color: Colors.grey,
+            color: color,
             imagePath: '',
           ),
         )
@@ -60,7 +60,7 @@ class GameStateProvider with ChangeNotifier {
   }
 
   // Add these methods
-  Future<MoveExplanation> explainMove(Move move) async {
+  Future<MoveExplanation> explainMove(Color color, Move move) async {
     // Check if we already have an explanation
     if (_moveExplanations.containsKey(move.word)) {
       return _moveExplanations[move.word]!;
@@ -68,7 +68,7 @@ class GameStateProvider with ChangeNotifier {
 
     try {
       final currentScore = getPlayerScore(move.playerId);
-      final playerName = getPlayerNameById(move.playerId);
+      final playerName = getPlayerNameById(color, move.playerId);
       final explanation = await _aiService.generateMoveExplanation(
         playerName,
         move,
@@ -380,7 +380,7 @@ class GameStateProvider with ChangeNotifier {
     super.dispose();
   }
 
-  Future<void> handleMoveExplanation(Move move) async {
+  Future<void> handleMoveExplanation(Color color, Move move) async {
     if (_isPlaying) {
       await _audioPlayer.stop();
       _isPlaying = false;
@@ -390,7 +390,7 @@ class GameStateProvider with ChangeNotifier {
 
     try {
       final explanation = await _aiService.generateMoveExplanation(
-        getPlayerNameById(move.playerId),
+        getPlayerNameById(color, move.playerId),
         move,
         getPlayerScore(move.playerId),
       );

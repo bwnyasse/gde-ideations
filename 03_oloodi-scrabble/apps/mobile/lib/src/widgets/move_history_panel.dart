@@ -7,6 +7,7 @@ class MoveHistoryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Consumer<GameStateProvider>(
       builder: (context, gameState, child) {
         final distribution = gameState.letterDistribution;
@@ -63,7 +64,7 @@ class MoveHistoryPanel extends StatelessWidget {
                       backgroundColor: player.color,
                       child: Text(
                         move.word[0],
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: theme.colorScheme.onPrimary),
                       ),
                     ),
                     title: Text(move.word),

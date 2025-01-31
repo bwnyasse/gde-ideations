@@ -38,7 +38,7 @@ dependencies:
   google_generative_ai: ^0.2.0
   
   # Storage and Database
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.5.1
   sqflite: ^2.3.2
   
   # Utils

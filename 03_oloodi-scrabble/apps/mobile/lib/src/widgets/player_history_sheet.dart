@@ -14,6 +14,7 @@ class PlayerHistorySheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -52,7 +53,8 @@ class PlayerHistorySheet extends StatelessWidget {
                           backgroundColor: player.color,
                           child: Text(
                             move.word[0],
-                            style: const TextStyle(color: Colors.white),
+                            style:
+                                TextStyle(color: theme.colorScheme.onPrimary),
                           ),
                         ),
                         title: Text(move.word),

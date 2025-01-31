@@ -16,24 +16,25 @@ class PlayerScoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isCurrentPlayer 
-          ? AppTheme.accentColor.withOpacity(0.1)
-          : Colors.white.withOpacity(0.05),
+        color: isCurrentPlayer
+            ? theme.colorScheme.tertiary.withOpacity(0.1)
+            : theme.colorScheme.onPrimary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isCurrentPlayer 
-            ? AppTheme.accentColor 
-            : Colors.white.withOpacity(0.1),
+          color: isCurrentPlayer
+              ? theme.colorScheme.tertiary
+              : theme.colorScheme.onPrimary.withOpacity(0.1),
           width: isCurrentPlayer ? 2 : 1,
         ),
         boxShadow: [
           if (isCurrentPlayer)
             BoxShadow(
-              color: AppTheme.accentColor.withOpacity(0.2),
+              color: theme.colorScheme.tertiary.withOpacity(0.2),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -44,7 +45,7 @@ class PlayerScoreCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              _buildAvatar(),
+              _buildAvatar(context),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -52,8 +53,8 @@ class PlayerScoreCard extends StatelessWidget {
                   children: [
                     Text(
                       player.displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: theme.colorScheme.onPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -65,9 +66,9 @@ class PlayerScoreCard extends StatelessWidget {
                           width: 8,
                           height: 8,
                           decoration: BoxDecoration(
-                            color: isCurrentPlayer 
-                              ? AppTheme.accentColor 
-                              : Colors.white.withOpacity(0.3),
+                            color: isCurrentPlayer
+                                ? theme.colorScheme.tertiary
+                                : theme.colorScheme.onPrimary.withOpacity(0.3),
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -75,9 +76,9 @@ class PlayerScoreCard extends StatelessWidget {
                         Text(
                           isCurrentPlayer ? 'Current Turn' : 'Waiting',
                           style: TextStyle(
-                            color: isCurrentPlayer 
-                              ? AppTheme.accentColor 
-                              : Colors.white.withOpacity(0.5),
+                            color: isCurrentPlayer
+                                ? theme.colorScheme.tertiary
+                                : theme.colorScheme.onPrimary.withOpacity(0.5),
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -90,22 +91,23 @@ class PlayerScoreCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _buildScoreSection(),
+          _buildScoreSection(context),
         ],
       ),
     );
   }
 
-  Widget _buildAvatar() {
+  Widget _buildAvatar(context) {
+    final theme = Theme.of(context);
     return Container(
       width: 56,
       height: 56,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: isCurrentPlayer 
-            ? AppTheme.accentColor 
-            : Colors.white.withOpacity(0.2),
+          color: isCurrentPlayer
+              ? theme.colorScheme.tertiary
+              : theme.colorScheme.onPrimary.withOpacity(0.2),
           width: 2,
         ),
       ),
@@ -115,12 +117,12 @@ class PlayerScoreCard extends StatelessWidget {
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             return Container(
-              color: Colors.white.withOpacity(0.1),
+              color: theme.colorScheme.onPrimary.withOpacity(0.1),
               child: Icon(
                 Icons.person,
-                color: isCurrentPlayer 
-                  ? AppTheme.accentColor 
-                  : Colors.white.withOpacity(0.5),
+                color: isCurrentPlayer
+                    ? theme.colorScheme.tertiary
+                    : theme.colorScheme.onPrimary.withOpacity(0.5),
                 size: 32,
               ),
             );
@@ -130,26 +132,27 @@ class PlayerScoreCard extends StatelessWidget {
     );
   }
 
-  Widget _buildScoreSection() {
+  Widget _buildScoreSection(context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.2),
+        color: theme.colorScheme.onBackground.withOpacity(0.2),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.stars_rounded,
-            color: AppTheme.accentColor,
+            color: theme.colorScheme.tertiary,
             size: 20,
           ),
           const SizedBox(width: 8),
           Text(
             '$score',
-            style: const TextStyle(
-              color: AppTheme.accentColor,
+            style: TextStyle(
+              color: theme.colorScheme.tertiary,
               fontSize: 24,
               fontWeight: FontWeight.bold,
             ),
@@ -158,7 +161,7 @@ class PlayerScoreCard extends StatelessWidget {
           Text(
             'points',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: theme.colorScheme.onPrimary.withOpacity(0.7),
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),

@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/move.dart';
-import '../themes/app_themes.dart';
 import '../widgets/player_score_card.dart';
 import '../providers/game_state_provider.dart';
 
@@ -23,19 +22,21 @@ class ResponsiveLeftMenu extends StatelessWidget {
     required this.onRefreshBoard,
     required this.onExplanationToggle,
   });
+// In ResponsiveLeftMenu class:
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
     final menuWidth = math.min(screenWidth * 0.25, 350.0);
 
     return Container(
       width: menuWidth,
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor,
+        color: theme.primaryColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: theme.colorScheme.onBackground.withOpacity(0.2),
             blurRadius: 8,
             offset: const Offset(3, 0),
           ),
@@ -51,7 +52,7 @@ class ResponsiveLeftMenu extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle('Players'),
+                  _buildSectionTitle(context, 'Players'),
                   const SizedBox(height: 16),
                   _buildPlayerCards(),
                 ],
@@ -64,113 +65,16 @@ class ResponsiveLeftMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildActionRow(BuildContext context) {
-    return Consumer<GameStateProvider>(
-      builder: (context, gameState, _) {
-        final lastMove = gameState.lastMove;
-        final isPlaying = gameState.isPlaying;
-
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withOpacity(0.5),
-            border: Border(
-              top: BorderSide(
-                color: Colors.white.withOpacity(0.1),
-                width: 1,
-              ),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildActionIcon(
-                icon: Icons.refresh,
-                label: 'Refresh',
-                isEnabled: !gameState.isGameOver,
-                onTap: onRefreshBoard,
-              ),
-              _buildActionIcon(
-                icon: showHistory ? Icons.history_toggle_off : Icons.history,
-                label: 'History',
-                isActive: showHistory,
-                onTap: () => onHistoryToggle(!showHistory),
-              ),
-              _buildActionIcon(
-                icon: showChat ? Icons.chat_bubble : Icons.chat_bubble_outline,
-                label: 'Chat',
-                isActive: showChat,
-                onTap: () => onChatToggle(!showChat),
-              ),
-              if (lastMove != null)
-                _buildActionIcon(
-                  icon: isPlaying
-                      ? Icons.stop_circle_outlined
-                      : Icons.play_circle_outlined,
-                  label: isPlaying ? 'Stop' : 'Play',
-                  isActive: isPlaying,
-                  onTap: () => onExplanationToggle(lastMove),
-                )
-              else
-                _buildActionIcon(
-                  icon: Icons.lightbulb_outline,
-                  label: 'Explain',
-                  isEnabled: false,
-                  onTap: null,
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildActionIcon({
-    required IconData icon,
-    required String label,
-    bool isActive = false,
-    bool isEnabled = true,
-    VoidCallback? onTap,
-  }) {
-    return Tooltip(
-      message: label,
-      child: InkWell(
-        onTap: isEnabled ? onTap : null,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isActive
-                ? AppTheme.accentColor.withOpacity(0.1)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isActive ? AppTheme.accentColor : Colors.transparent,
-            ),
-          ),
-          child: Icon(
-            icon,
-            color: !isEnabled
-                ? Colors.white.withOpacity(0.3)
-                : isActive
-                    ? AppTheme.accentColor
-                    : Colors.white.withOpacity(0.7),
-            size: 24,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withOpacity(0.5),
+        color: theme.primaryColor.withOpacity(0.5),
         border: Border(
           bottom: BorderSide(
-            color: Colors.white.withOpacity(0.1),
-            width: 1,
+            color: theme.dividerColor,
           ),
         ),
       ),
@@ -180,24 +84,24 @@ class ResponsiveLeftMenu extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: AppTheme.accentColor.withOpacity(0.1),
+              color: theme.colorScheme.tertiary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.sports_esports,
-              color: AppTheme.accentColor,
+              color: theme.colorScheme.tertiary,
               size: 24,
             ),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Oloodi Scrabble',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: theme.colorScheme.onPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
@@ -206,7 +110,7 @@ class ResponsiveLeftMenu extends StatelessWidget {
                 Text(
                   'AI Companion',
                   style: TextStyle(
-                    color: AppTheme.accentColor,
+                    color: theme.colorScheme.tertiary,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),
@@ -219,11 +123,120 @@ class ResponsiveLeftMenu extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildActionRow(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Consumer<GameStateProvider>(
+      builder: (context, gameState, _) {
+        final lastMove = gameState.lastMove;
+        final isPlaying = gameState.isPlaying;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.primaryColor.withOpacity(0.5),
+            border: Border(
+              top: BorderSide(
+                color: theme.dividerColor,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildActionIcon(
+                context,
+                icon: Icons.refresh,
+                label: 'Refresh',
+                isEnabled: !gameState.isGameOver,
+                onTap: onRefreshBoard,
+              ),
+              _buildActionIcon(
+                context,
+                icon: showHistory ? Icons.history_toggle_off : Icons.history,
+                label: 'History',
+                isActive: showHistory,
+                onTap: () => onHistoryToggle(!showHistory),
+              ),
+              _buildActionIcon(
+                context,
+                icon: showChat ? Icons.chat_bubble : Icons.chat_bubble_outline,
+                label: 'Chat',
+                isActive: showChat,
+                onTap: () => onChatToggle(!showChat),
+              ),
+              if (lastMove != null)
+                _buildActionIcon(
+                  context,
+                  icon: isPlaying
+                      ? Icons.stop_circle_outlined
+                      : Icons.play_circle_outlined,
+                  label: isPlaying ? 'Stop' : 'Play',
+                  isActive: isPlaying,
+                  onTap: () => onExplanationToggle(lastMove),
+                )
+              else
+                _buildActionIcon(
+                  context,
+                  icon: Icons.lightbulb_outline,
+                  label: 'Explain',
+                  isEnabled: false,
+                  onTap: null,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionIcon(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    bool isActive = false,
+    bool isEnabled = true,
+    VoidCallback? onTap,
+  }) {
+    final theme = Theme.of(context);
+
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: isEnabled ? onTap : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isActive
+                ? theme.colorScheme.tertiary.withOpacity(0.1)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isActive ? theme.colorScheme.tertiary : Colors.transparent,
+            ),
+          ),
+          child: Icon(
+            icon,
+            color: !isEnabled
+                ? theme.colorScheme.onPrimary.withOpacity(0.3)
+                : isActive
+                    ? theme.colorScheme.tertiary
+                    : theme.colorScheme.onPrimary.withOpacity(0.7),
+            size: 24,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    final theme = Theme.of(context);
+
     return Text(
       title.toUpperCase(),
       style: TextStyle(
-        color: Colors.white.withOpacity(0.6),
+        color: theme.colorScheme.onPrimary.withOpacity(0.6),
         fontSize: 13,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.2,

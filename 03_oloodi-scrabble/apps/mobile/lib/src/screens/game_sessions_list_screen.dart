@@ -11,6 +11,7 @@ class GameSessionsListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Available Games'),
@@ -36,16 +37,21 @@ class GameSessionsListScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.sports_esports_outlined, size: 64, color: Colors.grey),
+                  Icon(Icons.sports_esports_outlined,
+                      size: 64,
+                      color: theme.colorScheme.onSurface.withOpacity(0.7)),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'No active game sessions',
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                    style: TextStyle(
+                        fontSize: 18,
+                        color: theme.colorScheme.onSurface.withOpacity(0.7)),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Wait for a moderator to start a game',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7)),
                   ),
                 ],
               ),
@@ -65,6 +71,7 @@ class GameSessionsListScreen extends StatelessWidget {
   }
 
   Widget _buildSessionCard(BuildContext context, GameSession session) {
+    final theme = Theme.of(context);
     final dateFormat = DateFormat('MMM d, y – h:mm a');
 
     return Card(
@@ -102,10 +109,10 @@ class GameSessionsListScreen extends StatelessWidget {
                                   color: Colors.green,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   'Live',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: theme.colorScheme.onPrimary,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -116,14 +123,15 @@ class GameSessionsListScreen extends StatelessWidget {
                         Text(
                           dateFormat.format(session.startTime),
                           style: TextStyle(
-                            color: Colors.grey[600],
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
                             fontSize: 12,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: Colors.grey),
+                  Icon(Icons.chevron_right,
+                      color: theme.colorScheme.onSurface.withOpacity(0.7)),
                 ],
               ),
               if (session.isActive) ...[
@@ -149,16 +157,20 @@ class GameSessionsListScreen extends StatelessWidget {
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildStatItem('Moves', stats['totalMoves']?.toString() ?? '0'),
-            _buildStatItem('Letters Remaining', stats['remainingLetters']?.toString() ?? '-'),
-            _buildStatItem('Duration', _formatDuration(session.startTime)),
+            _buildStatItem(
+                context, 'Moves', stats['totalMoves']?.toString() ?? '0'),
+            _buildStatItem(context, 'Letters Remaining',
+                stats['remainingLetters']?.toString() ?? '-'),
+            _buildStatItem(
+                context, 'Duration', _formatDuration(session.startTime)),
           ],
         );
       },
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
+  Widget _buildStatItem(context, String label, String value) {
+    final theme = Theme.of(context);
     return Column(
       children: [
         Text(
@@ -172,7 +184,7 @@ class GameSessionsListScreen extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
         ),
       ],
@@ -189,7 +201,7 @@ class GameSessionsListScreen extends StatelessWidget {
   void _joinSession(BuildContext context, GameSession session) async {
     try {
       await context.read<GameStateProvider>().initializeGame(session.id);
-      
+
       if (context.mounted) {
         Navigator.pushReplacement(
           context,

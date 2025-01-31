@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/game_state_provider.dart';
 import '../models/board_square.dart';
 import '../models/tile.dart';
+
 // lib/widgets/board_widget.dart
 class BoardWidget extends StatefulWidget {
   const BoardWidget({super.key});
@@ -62,7 +63,7 @@ class _BoardWidgetState extends State<BoardWidget> {
                   final row = index ~/ 15;
                   final col = index % 15;
                   final square = gameState.board[row][col];
-                  
+
                   return _buildSquare(square, gameState);
                 },
               ),
@@ -84,7 +85,8 @@ class _BoardWidgetState extends State<BoardWidget> {
           : _buildSquareContent(square.type),
     );
   }
-Widget _buildTile(Tile tile, GameStateProvider gameState) {
+
+  Widget _buildTile(Tile tile, GameStateProvider gameState) {
     final player = gameState.players.firstWhere(
       (p) => p.id == tile.playerId,
       orElse: () => gameState.players[0],
