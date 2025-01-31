@@ -1,5 +1,7 @@
 // lib/src/providers/game_state_provider.dart
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move_explanation.dart';
@@ -16,7 +18,6 @@ class GameStateProvider with ChangeNotifier {
   final AIService _aiService = AIService();
   Map<String, MoveExplanation> _moveExplanations = {};
 
-  bool _showAudioControls = false;
   MoveExplanation? _currentExplanation;
 
   // Game state
@@ -27,6 +28,12 @@ class GameStateProvider with ChangeNotifier {
   bool _isGameOver = false;
   String? _gameId;
 
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isPlaying = false;
+
+  // Add getters
+  bool get isPlaying => _isPlaying;
+
   // Subscriptions
   StreamSubscription? _gameSubscription;
   StreamSubscription? _movesSubscription;
@@ -36,26 +43,20 @@ class GameStateProvider with ChangeNotifier {
     _initializeBoard();
   }
 
-  // Add getters
-  bool get showAudioControls => _showAudioControls;
   MoveExplanation? get currentExplanation => _currentExplanation;
 
-String getPlayerNameById(String playerId) {
-  return _players.firstWhere(
-    (player) => player.id == playerId,
-    orElse: () => Player(
-      id: playerId,
-      displayName: 'Unknown Player',
-      color: Colors.grey,
-      imagePath: '',
-    ),
-  ).displayName;
-}
-
-  void toggleAudioControls(MoveExplanation? explanation) {
-    _showAudioControls = explanation != null;
-    _currentExplanation = explanation;
-    notifyListeners();
+  String getPlayerNameById(String playerId) {
+    return _players
+        .firstWhere(
+          (player) => player.id == playerId,
+          orElse: () => Player(
+            id: playerId,
+            displayName: 'Unknown Player',
+            color: Colors.grey,
+            imagePath: '',
+          ),
+        )
+        .displayName;
   }
 
   // Add these methods
@@ -375,6 +376,41 @@ String getPlayerNameById(String playerId) {
   void dispose() {
     _gameSubscription?.cancel();
     _movesSubscription?.cancel();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> handleMoveExplanation(Move move) async {
+    if (_isPlaying) {
+      await _audioPlayer.stop();
+      _isPlaying = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final explanation = await _aiService.generateMoveExplanation(
+        getPlayerNameById(move.playerId),
+        move,
+        getPlayerScore(move.playerId),
+      );
+
+      final audioData = await _aiService.convertToSpeech(explanation);
+
+      await _audioPlayer.play(BytesSource(Uint8List.fromList(audioData)));
+      _isPlaying = true;
+
+      // Set up completion listener
+      _audioPlayer.onPlayerComplete.listen((_) {
+        _isPlaying = false;
+        notifyListeners();
+      });
+
+      notifyListeners();
+    } catch (e) {
+      _isPlaying = false;
+      notifyListeners();
+      throw Exception('Failed to play move explanation: $e');
+    }
   }
 }

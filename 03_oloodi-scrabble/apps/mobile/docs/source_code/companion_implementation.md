@@ -71,6 +71,7 @@ class DefaultFirebaseOptions {
 ```dart
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:oloodi_scrabble_end_user_app/src/screens/game_sessions_list_screen.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:provider/provider.dart';
@@ -83,6 +84,8 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+    // Make sure to add this line
+  await dotenv.load(fileName: ".env");
   runApp(const ScrabbleAIApp());
 }
 
@@ -111,6 +114,8 @@ class ScrabbleAIApp extends StatelessWidget {
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/models/move_explanation.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/ai_service.dart';
 import '../models/game_session.dart';
 import '../models/board_square.dart';
 import '../models/move.dart';
@@ -120,6 +125,11 @@ import '../service/firebase_service.dart';
 
 class GameStateProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
+  final AIService _aiService = AIService();
+  Map<String, MoveExplanation> _moveExplanations = {};
+
+  bool _showAudioControls = false;
+  MoveExplanation? _currentExplanation;
 
   // Game state
   List<List<BoardSquare>> _board = [];
@@ -137,6 +147,63 @@ class GameStateProvider with ChangeNotifier {
   GameStateProvider() {
     _initializeBoard();
   }
+
+  // Add getters
+  bool get showAudioControls => _showAudioControls;
+  MoveExplanation? get currentExplanation => _currentExplanation;
+
+String getPlayerNameById(String playerId) {
+  return _players.firstWhere(
+    (player) => player.id == playerId,
+    orElse: () => Player(
+      id: playerId,
+      displayName: 'Unknown Player',
+      color: Colors.grey,
+      imagePath: '',
+    ),
+  ).displayName;
+}
+
+  void toggleAudioControls(MoveExplanation? explanation) {
+    _showAudioControls = explanation != null;
+    _currentExplanation = explanation;
+    notifyListeners();
+  }
+
+  // Add these methods
+  Future<MoveExplanation> explainMove(Move move) async {
+    // Check if we already have an explanation
+    if (_moveExplanations.containsKey(move.word)) {
+      return _moveExplanations[move.word]!;
+    }
+
+    try {
+      final currentScore = getPlayerScore(move.playerId);
+      final playerName = getPlayerNameById(move.playerId);
+      final explanation = await _aiService.generateMoveExplanation(
+        playerName,
+        move,
+        currentScore,
+      );
+
+      // Convert to speech in parallel
+      final audioData = await _aiService.convertToSpeech(explanation);
+
+      final moveExplanation = MoveExplanation(
+        text: explanation,
+        audioData: audioData,
+      );
+
+      _moveExplanations[move.word] = moveExplanation;
+      notifyListeners();
+
+      return moveExplanation;
+    } catch (e) {
+      throw Exception('Failed to explain move: $e');
+    }
+  }
+
+  MoveExplanation? getExplanation(String word) => _moveExplanations[word];
 
   // Get available game sessions
   Stream<List<GameSession>> getAvailableSessions() {
@@ -440,6 +507,19 @@ class Tile {
   });
 }
 ```\n
+\n### src/models/move_explanation.dart\n
+```dart
+class MoveExplanation {
+  final String text;
+  final List<int>? audioData;
+  final DateTime timestamp;
+
+  MoveExplanation({
+    required this.text,
+    this.audioData,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
+}```\n
 \n### src/models/game_session.dart\n
 ```dart
 // lib/src/models/game_session.dart
@@ -526,6 +606,20 @@ Map<String, dynamic> _$PlacedTileToJson(PlacedTile instance) =>
 \n### src/models/player.dart\n
 ```dart
 import 'package:flutter/material.dart';
+
+extension PlayerListExtension on List<Player> {
+  String getDisplayNameById(String playerId) {
+    return firstWhere(
+      (player) => player.id == playerId,
+      orElse: () => Player(
+        id: playerId,
+        displayName: 'Unknown Player',
+        color: Colors.grey,
+        imagePath: '',
+      ),
+    ).displayName;
+  }
+}
 
 class Player {
   final String id;
@@ -958,6 +1052,7 @@ import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/board_widget.dart';
+import 'package:oloodi_scrabble_end_user_app/src/widgets/move_explanation_controls.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/player_score_card.dart';
 import 'package:provider/provider.dart';
 
@@ -1155,9 +1250,15 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.lightbulb_outline,
               label: 'Explain Last Move',
               onPressed: gameState.lastMove != null
-                  ? () => _showMoveExplanation(gameState.lastMove!)
+                  ? () => _handleExplainLastMove(gameState)
                   : null,
             ),
+            if (gameState.showAudioControls &&
+                gameState.currentExplanation != null)
+              MoveExplanationControls(
+                explanation: gameState.currentExplanation!,
+                onClose: () => gameState.toggleAudioControls(null),
+              ),
           ],
         );
       },
@@ -1285,28 +1386,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showMoveExplanation(Move lastMove) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${lastMove.word} (${lastMove.score} points)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Player: ${lastMove.playerId}'),
-            const SizedBox(height: 8),
-            const Text('Explanation coming soon...'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+  Future<void> _handleExplainLastMove(GameStateProvider gameState) async {
+    if (gameState.lastMove == null) return;
+
+    try {
+      final explanation = await gameState.explainMove(gameState.lastMove!);
+      if (mounted) {
+        gameState.toggleAudioControls(explanation);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating explanation: $e'),
+            backgroundColor: Colors.red,
           ),
-        ],
-      ),
-    );
+        );
+      }
+    }
   }
 }
 ```\n
@@ -1505,6 +1602,111 @@ class FirebaseService {
     }
 
     return GameSession.fromFirestore(doc);
+  }
+}
+```\n
+\n### src/service/ai_service.dart\n
+```dart
+import 'package:cloud_text_to_speech/cloud_text_to_speech.dart';
+import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+class AIService {
+  late GenerativeModel _model;
+
+  AIService() {
+    _model = FirebaseVertexAI.instance
+        .generativeModel(model: 'gemini-2.0-flash-exp');
+    // Initialize TTS with Google provider
+    TtsGoogle.init(
+      apiKey: dotenv.get('GOOGLE_CLOUD_API_KEY'),
+      withLogs: true, // Set to false in production
+    );
+  }
+
+  Future<String> generateMoveExplanation(String playerName, Move move, int currentScore) async {
+    try {
+      final prompt = '''
+      Explain this Scrabble move played by $playerName in a concise and engaging way:
+      - Word: ${move.word}
+      - Score for this move: ${move.score} points
+      - Tiles placed: ${move.tiles.map((t) => '${t.letter}(${t.points})').join(', ')}
+      - Current total score after this move: $currentScore points
+      
+      Please explain:
+      1. Like you were talking directly to the player
+      2. Why this is a good move
+      3. How the score was calculated
+      4. Any strategic implications
+      Keep it brief but informative in 2 sentences maximum.
+      ''';
+
+      final response = await _model.generateContent([
+        Content.multi([
+          TextPart(prompt),
+        ]),
+      ]);
+
+      if (response.text == null) {
+        throw Exception('Empty response from Gemini');
+      }
+
+      // Clean markdown from the response for display
+      final cleanedText = _cleanMarkdownText(response.text!);
+      return cleanedText;
+    } catch (e) {
+      throw Exception('Failed to generate move explanation: $e');
+    }
+  }
+
+  String _cleanMarkdownText(String markdown) {
+    // Remove headers
+    var cleaned = markdown.replaceAll(RegExp(r'#{1,6}\s.*\n'), '');
+
+    // Remove bold and italic markers
+    cleaned = cleaned.replaceAll(RegExp(r'\*\*|__|\*|_'), '');
+
+    // Remove code blocks and inline code
+    cleaned = cleaned.replaceAll(RegExp(r'```[\s\S]*?```'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'`[^`]*`'), '');
+
+    // Remove bullet points and numbered lists
+    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*+]\s+', multiLine: true), '');
+    cleaned = cleaned.replaceAll(RegExp(r'^\s*\d+\.\s+', multiLine: true), '');
+
+    // Remove links
+    cleaned = cleaned.replaceAll(RegExp(r'\[([^\]]*)\]\([^\)]*\)'), r'$1');
+
+    // Remove horizontal rules
+    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*_]{3,}\s*'), '');
+
+    // Remove extra whitespace
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ');
+
+    return cleaned.trim();
+  }
+
+  Future<List<int>> convertToSpeech(String text) async {
+    // Get voices
+    final voicesResponse = await TtsGoogle.getVoices();
+    
+    //Pick an English Voice
+    final voice = voicesResponse.voices
+        .where((element) => element.name.startsWith('Mason'))
+        .toList(growable: false)
+        .first;
+
+    TtsParamsGoogle params = TtsParamsGoogle(
+        voice: voice,
+        audioFormat: AudioOutputFormatGoogle.linear16,
+        text: text,
+        );
+
+    final ttsResponse = await TtsGoogle.convertTts(params);
+
+    //Get the audio bytes.
+    return ttsResponse.audio.buffer.asUint8List().toList();
   }
 }
 ```\n
@@ -1794,6 +1996,202 @@ class MoveHistoryPanel extends StatelessWidget {
   }
 }
 ```\n
+\n### src/widgets/move_explanation_controls.dart\n
+```dart
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
+import '../models/move_explanation.dart';
+import '../themes/app_themes.dart';
+
+class MoveExplanationControls extends StatefulWidget {
+  final MoveExplanation explanation;
+  final VoidCallback onClose;
+
+  const MoveExplanationControls({
+    super.key,
+    required this.explanation,
+    required this.onClose,
+  });
+
+  @override
+  State<MoveExplanationControls> createState() => _MoveExplanationControlsState();
+}
+
+class _MoveExplanationControlsState extends State<MoveExplanationControls> {
+  late AudioPlayer _audioPlayer;
+  bool _isPlaying = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAudioPlayer();
+  }
+
+  void _initAudioPlayer() {
+    _audioPlayer = AudioPlayer();
+    
+    _audioPlayer.onDurationChanged.listen((duration) {
+      if (mounted) setState(() => _duration = duration);
+    });
+
+    _audioPlayer.onPositionChanged.listen((position) {
+      if (mounted) setState(() => _position = position);
+    });
+
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _position = Duration.zero;
+        });
+      }
+    });
+  }
+
+  Future<void> _playPause() async {
+    if (widget.explanation.audioData == null) return;
+
+    if (_isPlaying) {
+      await _audioPlayer.pause();
+    } else {
+      if (_position == Duration.zero) {
+     await _audioPlayer.play(BytesSource(Uint8List.fromList(widget.explanation.audioData!)));
+      } else {
+        await _audioPlayer.resume();
+      }
+    }
+    
+    setState(() => _isPlaying = !_isPlaying);
+  }
+
+  Future<void> _seekTo(Duration position) async {
+    await _audioPlayer.seek(position);
+    setState(() => _position = position);
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppTheme.accentColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  _isPlaying ? Icons.pause_circle : Icons.play_circle,
+                  color: AppTheme.accentColor,
+                  size: 32,
+                ),
+                onPressed: _playPause,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Move Explanation',
+                      style: TextStyle(
+                        color: AppTheme.accentColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          _formatDuration(_position),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 2,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6,
+                              ),
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 14,
+                              ),
+                              activeTrackColor: AppTheme.accentColor,
+                              inactiveTrackColor: Colors.white24,
+                              thumbColor: AppTheme.accentColor,
+                              overlayColor: AppTheme.accentColor.withOpacity(0.2),
+                            ),
+                            child: Slider(
+                              min: 0,
+                              max: _duration.inMilliseconds.toDouble(),
+                              value: _position.inMilliseconds.toDouble(),
+                              onChanged: (value) {
+                                _seekTo(Duration(milliseconds: value.toInt()));
+                              },
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _formatDuration(_duration),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  _audioPlayer.stop();
+                  widget.onClose();
+                },
+                color: Colors.white70,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.explanation.text,
+            style: const TextStyle(color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+}```\n
 \n### src/widgets/player_score_card.dart\n
 ```dart
 import 'package:flutter/material.dart';
@@ -2153,6 +2551,9 @@ dependencies:
   json_annotation: ^4.9.0
   firebase_storage: ^12.4.1
   firebase_vertexai: ^1.1.1
+  audioplayers: ^6.1.1
+  cloud_text_to_speech: ^1.1.3
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -2173,13 +2574,7 @@ flutter:
   # Assets
   assets:
     - assets/images/
-  # Fonts (uncomment and add custom fonts if needed)
-  # fonts:
-  #   - family: CustomFont
-  #     fonts:
-  #       - asset: fonts/CustomFont-Regular.ttf
-  #       - asset: fonts/CustomFont-Bold.ttf
-  #         weight: 700
+    - .env
 
 # Flutter Launcher Icons configuration (customize as needed)
 flutter_launcher_icons:

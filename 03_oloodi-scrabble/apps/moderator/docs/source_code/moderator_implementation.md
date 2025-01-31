@@ -98,7 +98,7 @@ class ModeratorApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => GameSessionProvider()),
       ],
       child: MaterialApp(
-        title: 'Scrabble Moderator',
+        title: 'Oloodi Scrabble Moderator',
         theme: AppTheme.theme,
         home: const GameSessionsListScreen(),
       ),
@@ -691,6 +691,7 @@ class BoardSquare {
 // lib/src/screens/game_monitoring_screen.dart
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_moderator_app/src/services/qr_service.dart';
+import 'package:oloodi_scrabble_moderator_app/src/themes/app_theme.dart';
 import 'package:oloodi_scrabble_moderator_app/src/widgets/recognition_metrics_viewer.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_session_provider.dart';
@@ -710,30 +711,7 @@ class GameMonitoringScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Game Monitoring'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code),
-            onPressed: () => _showQRCode(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.stop),
-            onPressed: () => _endGame(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.analytics),
-            onPressed: () => showDialog(
-              context: context,
-              builder: (_) => Dialog(
-                child: SizedBox(
-                  width: 400,
-                  height: 600,
-                  child: MetricsViewer(sessionId: sessionId),
-                ),
-              ),
-            ),
-          ),
-        ],
+        title: const Text('Oloodi Scrabble Monitoring'),
       ),
       body: FutureBuilder<void>(
         future: context.read<GameSessionProvider>().loadSession(sessionId),
@@ -776,11 +754,45 @@ class GameMonitoringScreen extends StatelessWidget {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _captureMove(context),
-        icon: const Icon(Icons.camera_alt),
-        label: const Text('Capture Move'),
-      ),
+      bottomNavigationBar: _buildBottomNavigationBar(context),
+    );
+  }
+
+  Widget _buildBottomNavigationBar(BuildContext context) {
+    return BottomNavigationBar(
+      items: <BottomNavigationBarItem>[
+        BottomNavigationBarItem(
+            icon: IconButton(
+              icon: const Icon(Icons.camera_alt),
+              onPressed: () => _captureMove(context),
+            ),
+            label: 'Capture Move'),
+        BottomNavigationBarItem(
+            icon: IconButton(
+              icon: const Icon(Icons.stop),
+              onPressed: () => _endGame(context),
+            ),
+            label: 'End Game'),
+        BottomNavigationBarItem(
+            icon: IconButton(
+              icon: const Icon(Icons.analytics),
+              onPressed: () => showDialog(
+                context: context,
+                builder: (_) => Dialog(
+                  child: SizedBox(
+                    width: 400,
+                    height: 600,
+                    child: MetricsViewer(sessionId: sessionId),
+                  ),
+                ),
+              ),
+            ),
+            label: 'Analytics'),
+      ],
+      currentIndex: 0,
+      selectedItemColor: AppTheme.accentColor,
+      unselectedItemColor: Colors.white54,
+      onTap: (index) {},
     );
   }
 
@@ -1153,9 +1165,6 @@ class _GameSessionsListScreenState extends State<GameSessionsListScreen> {
     );
   }
 }```\n
-\n### src/screens/qr_display_screen.dart\n
-```dart
-```\n
 \n### src/screens/move_capture_screen.dart\n
 ```dart
 import 'dart:io';
@@ -1384,7 +1393,8 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         }
 
         // Show confirmation dialog
-        final confirmed = await _showMoveConfirmation(context, word, score, tiles);
+        final confirmed =
+            await _showMoveConfirmation(context, word, score, tiles);
 
         if (confirmed == true && mounted) {
           // Add move to session
@@ -1954,9 +1964,119 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
 ```dart
 import 'package:flutter/material.dart';
 
-class AppTheme {
+// Original
+class AppTheme123445 {
+  static const primaryColor = Color(0xFF1E4B5F);
+  static const secondaryColor = Color(0xFF3C7A89);
+  static const accentColor = Color(0xFFEBA63F);
+  static const backgroundColor = Color(0xFFF5F5F5);
+  
   static ThemeData get theme => ThemeData(
-    // Theme configuration will go here
+    primaryColor: primaryColor,
+    scaffoldBackgroundColor: backgroundColor,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: primaryColor,
+      elevation: 0,
+      centerTitle: false,
+      iconTheme: IconThemeData(color: Colors.white),
+      titleTextStyle: TextStyle(
+        color: Colors.white,
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: primaryColor,
+      selectedItemColor: accentColor,
+      unselectedItemColor: Colors.white70,
+    ),
+  );
+}
+
+// Modern Dark Theme
+class AppTheme {
+  static const primaryColor = Color(0xFF1A1A2E);
+  static const secondaryColor = Color(0xFF16213E);
+  static const accentColor = Color(0xFF00FF95);
+  static const backgroundColor = Color(0xFF0F0F1A);
+  
+  static ThemeData get theme => ThemeData(
+    primaryColor: primaryColor,
+    scaffoldBackgroundColor: backgroundColor,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: primaryColor,
+      elevation: 0,
+      centerTitle: false,
+      iconTheme: IconThemeData(color: accentColor),
+      titleTextStyle: TextStyle(
+        color: Colors.white,
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: primaryColor,
+      selectedItemColor: accentColor,
+      unselectedItemColor: Colors.white54,
+    ),
+  );
+}
+
+// Minimal Light theme 
+class AppTheme12345 {
+  static const primaryColor = Color(0xFFF8F9FA);
+  static const secondaryColor = Color(0xFFE9ECEF);
+  static const accentColor = Color(0xFF6C63FF);
+  static const backgroundColor = Colors.white;
+  
+  static ThemeData get theme => ThemeData(
+    primaryColor: primaryColor,
+    scaffoldBackgroundColor: backgroundColor,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: primaryColor,
+      elevation: 0,
+      centerTitle: false,
+      iconTheme: IconThemeData(color: accentColor),
+      titleTextStyle: TextStyle(
+        color: Color(0xFF2D3436),
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: primaryColor,
+      selectedItemColor: accentColor,
+      unselectedItemColor: Color(0xFF95A5A6),
+    ),
+  );
+}
+
+// Natue-inspired Theme
+class AppTheme1234 {
+  static const primaryColor = Color(0xFF2D5A27);
+  static const secondaryColor = Color(0xFF4A8B3C);
+  static const accentColor = Color(0xFFFFC857);
+  static const backgroundColor = Color(0xFFF7F7F2);
+  
+  static ThemeData get theme => ThemeData(
+    primaryColor: primaryColor,
+    scaffoldBackgroundColor: backgroundColor,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: primaryColor,
+      elevation: 0,
+      centerTitle: false,
+      iconTheme: IconThemeData(color: Colors.white),
+      titleTextStyle: TextStyle(
+        color: Colors.white,
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: primaryColor,
+      selectedItemColor: accentColor,
+      unselectedItemColor: Colors.white70,
+    ),
   );
 }
 ```\n
@@ -2364,28 +2484,6 @@ class FirebaseService {
     );
   }
 
-  Future<String?> getLastMoveImage(String sessionId) async {
-    return FirebaseErrorHandler.wrap(
-      operation: 'get_last_move_image',
-      action: () async {
-        final querySnapshot = await _firestore
-            .collection('game_sessions')
-            .doc(sessionId)
-            .collection('moves')
-            .orderBy('timestamp', descending: true)
-            .limit(1)
-            .get();
-
-        if (querySnapshot.docs.isEmpty) {
-          return null;
-        }
-
-        final moveData = querySnapshot.docs.first.data();
-        return moveData['imagePath'] as String?;
-      },
-    );
-  }
-
   Future<void> addMoveToSession({
     required String sessionId,
     required String word,
@@ -2502,17 +2600,6 @@ class FirebaseService {
 
         batch.set(boardRef, currentData, SetOptions(merge: true));
         await batch.commit();
-      },
-    );
-  }
-
-  Future<void> updateSessionImage(String sessionId, String imagePath) async {
-    return FirebaseErrorHandler.wrap(
-      operation: 'update_session_image',
-      action: () async {
-        await _firestore.collection('game_sessions').doc(sessionId).update({
-          'lastMoveImage': imagePath,
-        });
       },
     );
   }

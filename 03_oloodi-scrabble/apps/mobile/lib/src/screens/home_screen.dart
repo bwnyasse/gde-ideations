@@ -3,7 +3,6 @@ import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/board_widget.dart';
-import 'package:oloodi_scrabble_end_user_app/src/widgets/move_explanation_controls.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/player_score_card.dart';
 import 'package:provider/provider.dart';
 
@@ -19,6 +18,60 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showHistory = false;
   bool _showChat = false;
+
+  Widget _buildMoveExplanationButton(GameStateProvider gameState) {
+    final lastMove = gameState.lastMove;
+    final isPlaying = gameState.isPlaying;
+
+    if (lastMove == null) {
+      return _buildActionButton(
+        icon: Icons.lightbulb_outline,
+        label: 'Move Explanations',
+        onPressed: null,
+      );
+    }
+
+    return Column(
+      children: [
+        _buildActionButton(
+          icon: isPlaying
+              ? Icons.stop_circle_outlined
+              : Icons.play_circle_outlined,
+          label: isPlaying ? 'Stop Explanation' : 'Play Last Move',
+          isActive: isPlaying,
+          onPressed: () => _handleExplanationPlayback(gameState, lastMove),
+        ),
+        if (isPlaying)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              lastMove.word,
+              style: const TextStyle(
+                color: AppTheme.accentColor,
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _handleExplanationPlayback(
+      GameStateProvider gameState, Move move) async {
+    try {
+      await gameState.handleMoveExplanation(move);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,18 +152,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Move History Panel
                 if (_showHistory)
-                  Positioned(
+                  const Positioned(
                     right: 0,
                     top: 0,
                     bottom: 0,
                     width: 300,
                     child: Card(
                       margin: EdgeInsets.zero,
-                      shape: const RoundedRectangleBorder(
+                      shape: RoundedRectangleBorder(
                         borderRadius:
                             BorderRadius.horizontal(left: Radius.circular(12)),
                       ),
-                      child: const MoveHistoryPanel(),
+                      child: MoveHistoryPanel(),
                     ),
                   ),
 
@@ -197,19 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 });
               },
             ),
-            _buildActionButton(
-              icon: Icons.lightbulb_outline,
-              label: 'Explain Last Move',
-              onPressed: gameState.lastMove != null
-                  ? () => _handleExplainLastMove(gameState)
-                  : null,
-            ),
-            if (gameState.showAudioControls &&
-                gameState.currentExplanation != null)
-              MoveExplanationControls(
-                explanation: gameState.currentExplanation!,
-                onClose: () => gameState.toggleAudioControls(null),
-              ),
+            _buildMoveExplanationButton(gameState),
           ],
         );
       },
@@ -263,9 +304,9 @@ class _HomeScreenState extends State<HomeScreen> {
             // Chat header
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppTheme.primaryColor,
-                borderRadius: const BorderRadius.vertical(
+                borderRadius: BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
               ),
@@ -335,25 +376,5 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _handleExplainLastMove(GameStateProvider gameState) async {
-    if (gameState.lastMove == null) return;
-
-    try {
-      final explanation = await gameState.explainMove(gameState.lastMove!);
-      if (mounted) {
-        gameState.toggleAudioControls(explanation);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error generating explanation: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 }
