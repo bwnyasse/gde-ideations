@@ -3,6 +3,7 @@ import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/board_widget.dart';
+import 'package:oloodi_scrabble_end_user_app/src/widgets/move_explanation_controls.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/player_score_card.dart';
 import 'package:provider/provider.dart';
 
@@ -200,9 +201,15 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.lightbulb_outline,
               label: 'Explain Last Move',
               onPressed: gameState.lastMove != null
-                  ? () => _showMoveExplanation(gameState.lastMove!)
+                  ? () => _handleExplainLastMove(gameState)
                   : null,
             ),
+            if (gameState.showAudioControls &&
+                gameState.currentExplanation != null)
+              MoveExplanationControls(
+                explanation: gameState.currentExplanation!,
+                onClose: () => gameState.toggleAudioControls(null),
+              ),
           ],
         );
       },
@@ -330,27 +337,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showMoveExplanation(Move lastMove) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${lastMove.word} (${lastMove.score} points)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Player: ${lastMove.playerId}'),
-            const SizedBox(height: 8),
-            const Text('Explanation coming soon...'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+  Future<void> _handleExplainLastMove(GameStateProvider gameState) async {
+    if (gameState.lastMove == null) return;
+
+    try {
+      final explanation = await gameState.explainMove(gameState.lastMove!);
+      if (mounted) {
+        gameState.toggleAudioControls(explanation);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating explanation: $e'),
+            backgroundColor: Colors.red,
           ),
-        ],
-      ),
-    );
+        );
+      }
+    }
   }
 }

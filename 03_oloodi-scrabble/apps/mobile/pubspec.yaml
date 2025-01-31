@@ -55,6 +55,9 @@ dependencies:
   json_annotation: ^4.9.0
   firebase_storage: ^12.4.1
   firebase_vertexai: ^1.1.1
+  audioplayers: ^6.1.1
+  cloud_text_to_speech: ^1.1.3
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -75,13 +78,7 @@ flutter:
   # Assets
   assets:
     - assets/images/
-  # Fonts (uncomment and add custom fonts if needed)
-  # fonts:
-  #   - family: CustomFont
-  #     fonts:
-  #       - asset: fonts/CustomFont-Regular.ttf
-  #       - asset: fonts/CustomFont-Bold.ttf
-  #         weight: 700
+    - .env
 
 # Flutter Launcher Icons configuration (customize as needed)
 flutter_launcher_icons:

@@ -2173,7 +2173,6 @@ flutter:
   # Assets
   assets:
     - assets/images/
-    
   # Fonts (uncomment and add custom fonts if needed)
   # fonts:
   #   - family: CustomFont

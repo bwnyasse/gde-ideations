@@ -2,6 +2,8 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/models/move_explanation.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/ai_service.dart';
 import '../models/game_session.dart';
 import '../models/board_square.dart';
 import '../models/move.dart';
@@ -11,6 +13,11 @@ import '../service/firebase_service.dart';
 
 class GameStateProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
+  final AIService _aiService = AIService();
+  Map<String, MoveExplanation> _moveExplanations = {};
+
+  bool _showAudioControls = false;
+  MoveExplanation? _currentExplanation;
 
   // Game state
   List<List<BoardSquare>> _board = [];
@@ -28,6 +35,63 @@ class GameStateProvider with ChangeNotifier {
   GameStateProvider() {
     _initializeBoard();
   }
+
+  // Add getters
+  bool get showAudioControls => _showAudioControls;
+  MoveExplanation? get currentExplanation => _currentExplanation;
+
+String getPlayerNameById(String playerId) {
+  return _players.firstWhere(
+    (player) => player.id == playerId,
+    orElse: () => Player(
+      id: playerId,
+      displayName: 'Unknown Player',
+      color: Colors.grey,
+      imagePath: '',
+    ),
+  ).displayName;
+}
+
+  void toggleAudioControls(MoveExplanation? explanation) {
+    _showAudioControls = explanation != null;
+    _currentExplanation = explanation;
+    notifyListeners();
+  }
+
+  // Add these methods
+  Future<MoveExplanation> explainMove(Move move) async {
+    // Check if we already have an explanation
+    if (_moveExplanations.containsKey(move.word)) {
+      return _moveExplanations[move.word]!;
+    }
+
+    try {
+      final currentScore = getPlayerScore(move.playerId);
+      final playerName = getPlayerNameById(move.playerId);
+      final explanation = await _aiService.generateMoveExplanation(
+        playerName,
+        move,
+        currentScore,
+      );
+
+      // Convert to speech in parallel
+      final audioData = await _aiService.convertToSpeech(explanation);
+
+      final moveExplanation = MoveExplanation(
+        text: explanation,
+        audioData: audioData,
+      );
+
+      _moveExplanations[move.word] = moveExplanation;
+      notifyListeners();
+
+      return moveExplanation;
+    } catch (e) {
+      throw Exception('Failed to explain move: $e');
+    }
+  }
+
+  MoveExplanation? getExplanation(String word) => _moveExplanations[word];
 
   // Get available game sessions
   Stream<List<GameSession>> getAvailableSessions() {
