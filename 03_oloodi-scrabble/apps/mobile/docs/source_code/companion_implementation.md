@@ -112,6 +112,8 @@ class ScrabbleAIApp extends StatelessWidget {
 ```dart
 // lib/src/providers/game_state_provider.dart
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move_explanation.dart';
@@ -128,7 +130,6 @@ class GameStateProvider with ChangeNotifier {
   final AIService _aiService = AIService();
   Map<String, MoveExplanation> _moveExplanations = {};
 
-  bool _showAudioControls = false;
   MoveExplanation? _currentExplanation;
 
   // Game state
@@ -139,6 +140,12 @@ class GameStateProvider with ChangeNotifier {
   bool _isGameOver = false;
   String? _gameId;
 
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isPlaying = false;
+
+  // Add getters
+  bool get isPlaying => _isPlaying;
+
   // Subscriptions
   StreamSubscription? _gameSubscription;
   StreamSubscription? _movesSubscription;
@@ -148,26 +155,20 @@ class GameStateProvider with ChangeNotifier {
     _initializeBoard();
   }
 
-  // Add getters
-  bool get showAudioControls => _showAudioControls;
   MoveExplanation? get currentExplanation => _currentExplanation;
 
-String getPlayerNameById(String playerId) {
-  return _players.firstWhere(
-    (player) => player.id == playerId,
-    orElse: () => Player(
-      id: playerId,
-      displayName: 'Unknown Player',
-      color: Colors.grey,
-      imagePath: '',
-    ),
-  ).displayName;
-}
-
-  void toggleAudioControls(MoveExplanation? explanation) {
-    _showAudioControls = explanation != null;
-    _currentExplanation = explanation;
-    notifyListeners();
+  String getPlayerNameById(String playerId) {
+    return _players
+        .firstWhere(
+          (player) => player.id == playerId,
+          orElse: () => Player(
+            id: playerId,
+            displayName: 'Unknown Player',
+            color: Colors.grey,
+            imagePath: '',
+          ),
+        )
+        .displayName;
   }
 
   // Add these methods
@@ -487,7 +488,42 @@ String getPlayerNameById(String playerId) {
   void dispose() {
     _gameSubscription?.cancel();
     _movesSubscription?.cancel();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> handleMoveExplanation(Move move) async {
+    if (_isPlaying) {
+      await _audioPlayer.stop();
+      _isPlaying = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final explanation = await _aiService.generateMoveExplanation(
+        getPlayerNameById(move.playerId),
+        move,
+        getPlayerScore(move.playerId),
+      );
+
+      final audioData = await _aiService.convertToSpeech(explanation);
+
+      await _audioPlayer.play(BytesSource(Uint8List.fromList(audioData)));
+      _isPlaying = true;
+
+      // Set up completion listener
+      _audioPlayer.onPlayerComplete.listen((_) {
+        _isPlaying = false;
+        notifyListeners();
+      });
+
+      notifyListeners();
+    } catch (e) {
+      _isPlaying = false;
+      notifyListeners();
+      throw Exception('Failed to play move explanation: $e');
+    }
   }
 }
 ```\n
@@ -1052,7 +1088,6 @@ import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/board_widget.dart';
-import 'package:oloodi_scrabble_end_user_app/src/widgets/move_explanation_controls.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/player_score_card.dart';
 import 'package:provider/provider.dart';
 
@@ -1068,6 +1103,60 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showHistory = false;
   bool _showChat = false;
+
+  Widget _buildMoveExplanationButton(GameStateProvider gameState) {
+    final lastMove = gameState.lastMove;
+    final isPlaying = gameState.isPlaying;
+
+    if (lastMove == null) {
+      return _buildActionButton(
+        icon: Icons.lightbulb_outline,
+        label: 'Move Explanations',
+        onPressed: null,
+      );
+    }
+
+    return Column(
+      children: [
+        _buildActionButton(
+          icon: isPlaying
+              ? Icons.stop_circle_outlined
+              : Icons.play_circle_outlined,
+          label: isPlaying ? 'Stop Explanation' : 'Play Last Move',
+          isActive: isPlaying,
+          onPressed: () => _handleExplanationPlayback(gameState, lastMove),
+        ),
+        if (isPlaying)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              lastMove.word,
+              style: const TextStyle(
+                color: AppTheme.accentColor,
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _handleExplanationPlayback(
+      GameStateProvider gameState, Move move) async {
+    try {
+      await gameState.handleMoveExplanation(move);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1148,18 +1237,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 // Move History Panel
                 if (_showHistory)
-                  Positioned(
+                  const Positioned(
                     right: 0,
                     top: 0,
                     bottom: 0,
                     width: 300,
                     child: Card(
                       margin: EdgeInsets.zero,
-                      shape: const RoundedRectangleBorder(
+                      shape: RoundedRectangleBorder(
                         borderRadius:
                             BorderRadius.horizontal(left: Radius.circular(12)),
                       ),
-                      child: const MoveHistoryPanel(),
+                      child: MoveHistoryPanel(),
                     ),
                   ),
 
@@ -1246,19 +1335,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 });
               },
             ),
-            _buildActionButton(
-              icon: Icons.lightbulb_outline,
-              label: 'Explain Last Move',
-              onPressed: gameState.lastMove != null
-                  ? () => _handleExplainLastMove(gameState)
-                  : null,
-            ),
-            if (gameState.showAudioControls &&
-                gameState.currentExplanation != null)
-              MoveExplanationControls(
-                explanation: gameState.currentExplanation!,
-                onClose: () => gameState.toggleAudioControls(null),
-              ),
+            _buildMoveExplanationButton(gameState),
           ],
         );
       },
@@ -1312,9 +1389,9 @@ class _HomeScreenState extends State<HomeScreen> {
             // Chat header
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppTheme.primaryColor,
-                borderRadius: const BorderRadius.vertical(
+                borderRadius: BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
               ),
@@ -1384,26 +1461,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _handleExplainLastMove(GameStateProvider gameState) async {
-    if (gameState.lastMove == null) return;
-
-    try {
-      final explanation = await gameState.explainMove(gameState.lastMove!);
-      if (mounted) {
-        gameState.toggleAudioControls(explanation);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error generating explanation: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 }
 ```\n
@@ -1996,202 +2053,6 @@ class MoveHistoryPanel extends StatelessWidget {
   }
 }
 ```\n
-\n### src/widgets/move_explanation_controls.dart\n
-```dart
-import 'dart:typed_data';
-
-import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
-import '../models/move_explanation.dart';
-import '../themes/app_themes.dart';
-
-class MoveExplanationControls extends StatefulWidget {
-  final MoveExplanation explanation;
-  final VoidCallback onClose;
-
-  const MoveExplanationControls({
-    super.key,
-    required this.explanation,
-    required this.onClose,
-  });
-
-  @override
-  State<MoveExplanationControls> createState() => _MoveExplanationControlsState();
-}
-
-class _MoveExplanationControlsState extends State<MoveExplanationControls> {
-  late AudioPlayer _audioPlayer;
-  bool _isPlaying = false;
-  Duration _duration = Duration.zero;
-  Duration _position = Duration.zero;
-
-  @override
-  void initState() {
-    super.initState();
-    _initAudioPlayer();
-  }
-
-  void _initAudioPlayer() {
-    _audioPlayer = AudioPlayer();
-    
-    _audioPlayer.onDurationChanged.listen((duration) {
-      if (mounted) setState(() => _duration = duration);
-    });
-
-    _audioPlayer.onPositionChanged.listen((position) {
-      if (mounted) setState(() => _position = position);
-    });
-
-    _audioPlayer.onPlayerComplete.listen((_) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-          _position = Duration.zero;
-        });
-      }
-    });
-  }
-
-  Future<void> _playPause() async {
-    if (widget.explanation.audioData == null) return;
-
-    if (_isPlaying) {
-      await _audioPlayer.pause();
-    } else {
-      if (_position == Duration.zero) {
-     await _audioPlayer.play(BytesSource(Uint8List.fromList(widget.explanation.audioData!)));
-      } else {
-        await _audioPlayer.resume();
-      }
-    }
-    
-    setState(() => _isPlaying = !_isPlaying);
-  }
-
-  Future<void> _seekTo(Duration position) async {
-    await _audioPlayer.seek(position);
-    setState(() => _position = position);
-  }
-
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return '$minutes:$seconds';
-  }
-
-  @override
-  void dispose() {
-    _audioPlayer.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppTheme.accentColor.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                icon: Icon(
-                  _isPlaying ? Icons.pause_circle : Icons.play_circle,
-                  color: AppTheme.accentColor,
-                  size: 32,
-                ),
-                onPressed: _playPause,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Move Explanation',
-                      style: TextStyle(
-                        color: AppTheme.accentColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          _formatDuration(_position),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Expanded(
-                          child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 2,
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6,
-                              ),
-                              overlayShape: const RoundSliderOverlayShape(
-                                overlayRadius: 14,
-                              ),
-                              activeTrackColor: AppTheme.accentColor,
-                              inactiveTrackColor: Colors.white24,
-                              thumbColor: AppTheme.accentColor,
-                              overlayColor: AppTheme.accentColor.withOpacity(0.2),
-                            ),
-                            child: Slider(
-                              min: 0,
-                              max: _duration.inMilliseconds.toDouble(),
-                              value: _position.inMilliseconds.toDouble(),
-                              onChanged: (value) {
-                                _seekTo(Duration(milliseconds: value.toInt()));
-                              },
-                            ),
-                          ),
-                        ),
-                        Text(
-                          _formatDuration(_duration),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  _audioPlayer.stop();
-                  widget.onClose();
-                },
-                color: Colors.white70,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            widget.explanation.text,
-            style: const TextStyle(color: Colors.white70),
-          ),
-        ],
-      ),
-    );
-  }
-}```\n
 \n### src/widgets/player_score_card.dart\n
 ```dart
 import 'package:flutter/material.dart';

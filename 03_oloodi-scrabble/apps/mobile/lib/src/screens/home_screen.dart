@@ -3,6 +3,7 @@ import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/game_state_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/board_widget.dart';
+import 'package:oloodi_scrabble_end_user_app/src/widgets/left_menu.dart';
 import 'package:oloodi_scrabble_end_user_app/src/widgets/player_score_card.dart';
 import 'package:provider/provider.dart';
 
@@ -19,45 +20,20 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showHistory = false;
   bool _showChat = false;
 
-  Widget _buildMoveExplanationButton(GameStateProvider gameState) {
-    final lastMove = gameState.lastMove;
-    final isPlaying = gameState.isPlaying;
-
-    if (lastMove == null) {
-      return _buildActionButton(
-        icon: Icons.lightbulb_outline,
-        label: 'Move Explanations',
-        onPressed: null,
-      );
+  Future<void> _handleRefresh(GameStateProvider gameState) async {
+    try {
+      await gameState.updateBoard();
+      if (mounted) {
+        // TODO: Add a snow Snack Bar Message : Board refreshed successfully
+      }
+    } catch (e) {
+      if (mounted) {
+        // TODO: Add a snow Snack Bar Message : Error refreshing board
+      }
     }
-
-    return Column(
-      children: [
-        _buildActionButton(
-          icon: isPlaying
-              ? Icons.stop_circle_outlined
-              : Icons.play_circle_outlined,
-          label: isPlaying ? 'Stop Explanation' : 'Play Last Move',
-          isActive: isPlaying,
-          onPressed: () => _handleExplanationPlayback(gameState, lastMove),
-        ),
-        if (isPlaying)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              lastMove.word,
-              style: const TextStyle(
-                color: AppTheme.accentColor,
-                fontWeight: FontWeight.w500,
-                fontSize: 13,
-              ),
-            ),
-          ),
-      ],
-    );
   }
 
-  Future<void> _handleExplanationPlayback(
+  Future<void> _handleExplanationToggle(
       GameStateProvider gameState, Move move) async {
     try {
       await gameState.handleMoveExplanation(move);
@@ -76,104 +52,52 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Row(
-        children: [
-          // Left Sidebar
-          Container(
-            width: 250,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 5,
-                  offset: const Offset(3, 0),
-                ),
-              ],
+      body: Consumer<GameStateProvider>(builder: (context, gameState, _) {
+        return Row(
+          children: [
+            ResponsiveLeftMenu(
+              showHistory: _showHistory,
+              showChat: _showChat,
+              onHistoryToggle: (value) => setState(() => _showHistory = value),
+              onChatToggle: (value) => setState(() => _showChat = value),
+              onRefreshBoard: () => _handleRefresh(gameState),
+              onExplanationToggle: (move) =>
+                  _handleExplanationToggle(gameState, move),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // App Title
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        'assets/images/app_icon.png', // Add your app icon
-                        width: 32,
-                        height: 32,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                          Icons.sports_esports,
-                          size: 32,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Oloodi Scrabble\nAI Companion',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
+            // Main Content Area
+            Expanded(
+              child: Stack(
+                children: [
+                  // Board
+                  const Center(
+                    child: BoardWidget(),
                   ),
-                ),
-                const Divider(color: Colors.white24),
 
-                // Player Cards
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: _buildPlayerCards(),
-                ),
-
-                const Spacer(),
-
-                // Action Buttons
-                _buildActionButtons(),
-
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-
-          // Main Content Area
-          Expanded(
-            child: Stack(
-              children: [
-                // Board
-                const Center(
-                  child: BoardWidget(),
-                ),
-
-                // Move History Panel
-                if (_showHistory)
-                  const Positioned(
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: 300,
-                    child: Card(
-                      margin: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.horizontal(left: Radius.circular(12)),
+                  // Move History Panel
+                  if (_showHistory)
+                    const Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 300,
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.horizontal(
+                              left: Radius.circular(12)),
+                        ),
+                        child: MoveHistoryPanel(),
                       ),
-                      child: MoveHistoryPanel(),
                     ),
-                  ),
 
-                // Chat Overlay
-                if (_showChat) _buildChatOverlay(),
-              ],
+                  // Chat Overlay
+                  if (_showChat) _buildChatOverlay(),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        );
+      }),
     );
   }
 
@@ -190,67 +114,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
             ],
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Consumer<GameStateProvider>(
-      builder: (context, gameState, child) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Divider(color: Colors.white24),
-            _buildActionButton(
-                icon: Icons.refresh,
-                label: 'Refresh Board',
-                onPressed: gameState.isGameOver
-                    ? null
-                    : () async {
-                        try {
-                          await gameState.updateBoard();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Board refreshed successfully'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error refreshing board: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      }),
-            _buildActionButton(
-              icon: _showHistory ? Icons.history_toggle_off : Icons.history,
-              label: 'Move History',
-              isActive: _showHistory,
-              onPressed: () {
-                setState(() {
-                  _showHistory = !_showHistory;
-                });
-              },
-            ),
-            _buildActionButton(
-              icon: _showChat ? Icons.chat_bubble : Icons.chat_bubble_outline,
-              label: 'Chat',
-              isActive: _showChat,
-              onPressed: () {
-                setState(() {
-                  _showChat = !_showChat;
-                });
-              },
-            ),
-            _buildMoveExplanationButton(gameState),
           ],
         );
       },
@@ -301,7 +164,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Column(
           children: [
-            // Chat header
             Container(
               padding: const EdgeInsets.all(8),
               decoration: const BoxDecoration(
@@ -322,54 +184,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () {
-                      setState(() {
-                        _showChat = false;
-                      });
-                    },
+                    onPressed: () => setState(() => _showChat = false),
                   ),
                 ],
               ),
             ),
-            // Chat messages area
             const Expanded(
-              child: Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Center(
-                  child: Text('Chat functionality coming soon...'),
-                ),
-              ),
-            ),
-            // Input area
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.mic),
-                    onPressed: () {
-                      // Implement voice input
-                    },
-                  ),
-                  const Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Type your message...',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: () {
-                      // Send message
-                    },
-                  ),
-                ],
+              child: Center(
+                child: Text('Chat functionality coming soon...'),
               ),
             ),
           ],
