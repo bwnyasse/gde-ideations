@@ -1,7 +1,6 @@
 import 'package:cloud_text_to_speech/cloud_text_to_speech.dart';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AIService {
   late GenerativeModel _model;
@@ -11,12 +10,13 @@ class AIService {
         .generativeModel(model: 'gemini-2.0-flash-exp');
     // Initialize TTS with Google provider
     TtsGoogle.init(
-      apiKey: dotenv.get('GOOGLE_CLOUD_API_KEY'),
+      apiKey: const String.fromEnvironment('GOOGLE_CLOUD_API_KEY'),
       withLogs: true, // Set to false in production
     );
   }
 
-  Future<String> generateMoveExplanation(String playerName, Move move, int currentScore) async {
+  Future<String> generateMoveExplanation(
+      String playerName, Move move, int currentScore) async {
     try {
       final prompt = '''
       Explain this Scrabble move played by $playerName in a concise and engaging way:
@@ -81,7 +81,7 @@ class AIService {
   Future<List<int>> convertToSpeech(String text) async {
     // Get voices
     final voicesResponse = await TtsGoogle.getVoices();
-    
+
     //Pick an English Voice
     final voice = voicesResponse.voices
         .where((element) => element.name.startsWith('Mason'))
@@ -89,10 +89,10 @@ class AIService {
         .first;
 
     TtsParamsGoogle params = TtsParamsGoogle(
-        voice: voice,
-        audioFormat: AudioOutputFormatGoogle.linear16,
-        text: text,
-        );
+      voice: voice,
+      audioFormat: AudioOutputFormatGoogle.linear16,
+      text: text,
+    );
 
     final ttsResponse = await TtsGoogle.convertTts(params);
 

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/game_state_provider.dart';
 import '../models/board_square.dart';
 import '../models/tile.dart';
+import 'dart:math' as math;
 
 // lib/widgets/board_widget.dart
 class BoardWidget extends StatefulWidget {
@@ -93,63 +94,88 @@ class _BoardWidgetState extends State<BoardWidget> {
     );
 
     return AnimatedScale(
-      scale: tile.isNew ? 0.0 : 1.0,
+      scale: tile.isNew? 0.0: 1.0,
       duration: const Duration(milliseconds: 500),
       curve: Curves.elasticOut,
       child: AnimatedRotation(
-        turns: tile.isNew ? -0.5 : 0,
+        turns: tile.isNew? -0.5: 0,
         duration: const Duration(milliseconds: 500),
         curve: Curves.elasticOut,
-        child: Container(
-          margin: const EdgeInsets.all(1),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF7D698),
-            borderRadius: BorderRadius.circular(4),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 2,
-                offset: const Offset(1, 1),
+        child: Transform(
+          transform: Matrix4.identity()
+          ..setEntry(3, 2, 0.0015)
+          ..rotateX(-math.pi / 12),
+          alignment: Alignment.center,
+          child: Container(
+            margin: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFFF7E7C6),
+                  Color(0xFFF5D08A),
+                ],
               ),
-            ],
-            border: Border.all(
-              color: player.color,
-              width: 2,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 5,
+                  offset: const Offset(2, 3),
+                ),
+              ],
+              border: Border.all(
+                color: player.color,
+                width: 2,
+              ),
             ),
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Letter - left aligned
-              Positioned(
-                left: 4,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: Text(
-                    tile.letter,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned(
+                  left: 4,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: Text(
+                      tile.letter,
+                      style:  TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 2,
+                            color: Colors.black.withOpacity(0.2),
+                            offset: const Offset(1, 1),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              // Points - right aligned
-              Positioned(
-                right: 2,
-                bottom: 1,
-                child: Text(
-                  '${tile.points}',
-                  style: const TextStyle(
-                    fontSize: 7,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black54,
+                Positioned(
+                  right: 2,
+                  bottom: 1,
+                  child: Text(
+                    '${tile.points}',
+                    style:  TextStyle(
+                      fontSize: 7,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                      shadows: [
+                        Shadow(
+                          blurRadius: 1,
+                          color: Colors.black.withOpacity(0.2),
+                          offset: const Offset(0.5, 0.5),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
