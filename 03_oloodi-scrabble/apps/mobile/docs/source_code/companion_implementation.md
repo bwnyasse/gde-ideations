@@ -71,7 +71,6 @@ class DefaultFirebaseOptions {
 ```dart
 // lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/screens/game_sessions_list_screen.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
@@ -86,8 +85,6 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  // Make sure to add this line
-  await dotenv.load(fileName: ".env");
 
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
@@ -115,12 +112,13 @@ class ScrabbleAIApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Oloodi Scrabble Companion',
-        theme: AppTheme.getThemeData(settings.themeMode),
+        theme: AppTheme.getThemeData(settings.themeMode), // Use 
         debugShowCheckedModeBanner: false,
         home: const GameSessionsListScreen(),
       ),
     );
   }
+
 }
 ```\n
 \n### src/providers/game_state_provider.dart\n
@@ -145,7 +143,6 @@ class GameStateProvider with ChangeNotifier {
   final AIService _aiService = AIService();
   Map<String, MoveExplanation> _moveExplanations = {};
 
-  MoveExplanation? _currentExplanation;
 
   // Game state
   List<List<BoardSquare>> _board = [];
@@ -170,16 +167,14 @@ class GameStateProvider with ChangeNotifier {
     _initializeBoard();
   }
 
-  MoveExplanation? get currentExplanation => _currentExplanation;
-
-  String getPlayerNameById(String playerId) {
+  String getPlayerNameById(Color color, String playerId) {
     return _players
         .firstWhere(
           (player) => player.id == playerId,
           orElse: () => Player(
             id: playerId,
             displayName: 'Unknown Player',
-            color: Colors.grey,
+            color: color,
             imagePath: '',
           ),
         )
@@ -187,7 +182,7 @@ class GameStateProvider with ChangeNotifier {
   }
 
   // Add these methods
-  Future<MoveExplanation> explainMove(Move move) async {
+  Future<MoveExplanation> explainMove(Color color, Move move) async {
     // Check if we already have an explanation
     if (_moveExplanations.containsKey(move.word)) {
       return _moveExplanations[move.word]!;
@@ -195,7 +190,7 @@ class GameStateProvider with ChangeNotifier {
 
     try {
       final currentScore = getPlayerScore(move.playerId);
-      final playerName = getPlayerNameById(move.playerId);
+      final playerName = getPlayerNameById(color, move.playerId);
       final explanation = await _aiService.generateMoveExplanation(
         playerName,
         move,
@@ -341,7 +336,7 @@ class GameStateProvider with ChangeNotifier {
         return BoardSquare(
           row: row,
           col: col,
-          type: _getSquareType(row, col),
+          type: getSquareType(row, col),
         );
       });
     });
@@ -422,44 +417,6 @@ class GameStateProvider with ChangeNotifier {
     });
   }
 
-  // Get square type for board initialization
-  SquareType _getSquareType(int row, int col) {
-    // Center square
-    if (row == 7 && col == 7) {
-      return SquareType.doubleWord;
-    }
-
-    // Triple Word Score
-    if ((row == 0 || row == 14) && (col == 0 || col == 7 || col == 14) ||
-        (row == 7 && (col == 0 || col == 14))) {
-      return SquareType.tripleWord;
-    }
-
-    // Double Word Score
-    if (row == col || row + col == 14) {
-      if (row >= 1 && row <= 5 || row >= 9 && row <= 13) {
-        return SquareType.doubleWord;
-      }
-    }
-
-    // Triple Letter Score
-    if ((row == 1 || row == 13) && (col == 5 || col == 9) ||
-        (row == 5 || row == 9) &&
-            (col == 1 || col == 5 || col == 9 || col == 13)) {
-      return SquareType.tripleLetter;
-    }
-
-    // Double Letter Score
-    if ((row == 3 || row == 11) && (col == 0 || col == 7 || col == 14) ||
-        (row == 6 || row == 8) &&
-            (col == 2 || col == 6 || col == 8 || col == 12) ||
-        (row == 0 || row == 7 || col == 14) && (col == 3 || col == 11)) {
-      return SquareType.doubleLetter;
-    }
-
-    return SquareType.normal;
-  }
-
   // Letter distribution constants (French Scrabble distribution)
   static const Map<String, int> _initialLetterDistribution = {
     'A': 9,
@@ -507,7 +464,7 @@ class GameStateProvider with ChangeNotifier {
     super.dispose();
   }
 
-  Future<void> handleMoveExplanation(Move move) async {
+  Future<void> handleMoveExplanation(Color color, Move move) async {
     if (_isPlaying) {
       await _audioPlayer.stop();
       _isPlaying = false;
@@ -517,7 +474,7 @@ class GameStateProvider with ChangeNotifier {
 
     try {
       final explanation = await _aiService.generateMoveExplanation(
-        getPlayerNameById(move.playerId),
+        getPlayerNameById(color, move.playerId),
         move,
         getPlayerScore(move.playerId),
       );
@@ -773,20 +730,6 @@ Map<String, dynamic> _$PlacedTileToJson(PlacedTile instance) =>
 ```dart
 import 'package:flutter/material.dart';
 
-extension PlayerListExtension on List<Player> {
-  String getDisplayNameById(String playerId) {
-    return firstWhere(
-      (player) => player.id == playerId,
-      orElse: () => Player(
-        id: playerId,
-        displayName: 'Unknown Player',
-        color: Colors.grey,
-        imagePath: '',
-      ),
-    ).displayName;
-  }
-}
-
 class Player {
   final String id;
   final String displayName;
@@ -801,31 +744,8 @@ class Player {
   });
 }
 ```\n
-\n### src/models/board.dart\n
-```dart
-import 'package:oloodi_scrabble_end_user_app/src/models/tile.dart';
-
-class Board {
-  static const int boardSize = 15;
-  final List<List<Tile?>> tiles;
-  
-  Board() : tiles = List.generate(
-    boardSize,
-    (_) => List.generate(boardSize, (_) => null)
-  );
-  
-  bool isValidPlacement(int row, int col) {
-    if (row < 0 || row >= boardSize || col < 0 || col >= boardSize) {
-      return false;
-    }
-    return tiles[row][col] == null;
-  }
-  
-  // Additional board logic will go here
-}```\n
 \n### src/models/board_square.dart\n
 ```dart
-import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/tile.dart';
 
 class BoardSquare {
@@ -852,90 +772,43 @@ enum SquareType {
   center // Center square (acts as DW)
 }
 
-// Add this method to MockGameService
-SquareType getBoardSquareType(int row, int col) {
-  // Center square
-  if (row == 7 && col == 7) {
-    return SquareType.center;
-  }
-
-  // Triple Word Score (Red)
-  if ((row == 0 || row == 14) &&
-          (col == 0 || col == 7 || col == 14) || // Corners and middle edges
-      (row == 7 && (col == 0 || col == 14))) {
-    // Middle row edges
-    return SquareType.tripleWord;
-  }
-
-  // Double Word Score (Pink)
-  if (row == col || row + col == 14) {
-    // Diagonals
-    if (row >= 1 && row <= 5 || row >= 9 && row <= 13) {
-      // Excluding center and edges
+  // Get square type for board initialization
+  SquareType getSquareType(int row, int col) {
+    // Center square
+    if (row == 7 && col == 7) {
       return SquareType.doubleWord;
     }
-  }
 
-  // Triple Letter Score (Dark Blue)
-  if ((row == 1 || row == 13) && (col == 5 || col == 9) || // Near top/bottom
-      (row == 5 || row == 9) &&
-          (col == 1 || col == 5 || col == 9 || col == 13)) {
-    // Middle area
-    return SquareType.tripleLetter;
-  }
+    // Triple Word Score
+    if ((row == 0 || row == 14) && (col == 0 || col == 7 || col == 14) ||
+        (row == 7 && (col == 0 || col == 14))) {
+      return SquareType.tripleWord;
+    }
 
-  // Double Letter Score (Light Blue)
-  if ((row == 3 || row == 11) &&
-          (col == 0 || col == 7 || col == 14) || // Top/bottom edges
-      (row == 6 || row == 8) &&
-          (col == 2 || col == 6 || col == 8 || col == 12) || // Middle area
-      (row == 0 || row == 7 || row == 14) &&
-          (col == 3 || col == 11) || // Left/right edges
-      (row == 2 || row == 12) && (col == 6 || col == 8)) {
-    // Additional DL squares
-    return SquareType.doubleLetter;
-  }
+    // Double Word Score
+    if (row == col || row + col == 14) {
+      if (row >= 1 && row <= 5 || row >= 9 && row <= 13) {
+        return SquareType.doubleWord;
+      }
+    }
 
-  // Normal square
-  return SquareType.normal;
-}
+    // Triple Letter Score
+    if ((row == 1 || row == 13) && (col == 5 || col == 9) ||
+        (row == 5 || row == 9) &&
+            (col == 1 || col == 5 || col == 9 || col == 13)) {
+      return SquareType.tripleLetter;
+    }
 
-// Optional: Helper method to get a description of the square
-String getSquareDescription(SquareType type) {
-  switch (type) {
-    case SquareType.normal:
-      return '';
-    case SquareType.doubleLetter:
-      return 'DL';
-    case SquareType.tripleLetter:
-      return 'TL';
-    case SquareType.doubleWord:
-      return 'DW';
-    case SquareType.tripleWord:
-      return 'TW';
-    case SquareType.center:
-      return '★';
-  }
-}
+    // Double Letter Score
+    if ((row == 3 || row == 11) && (col == 0 || col == 7 || col == 14) ||
+        (row == 6 || row == 8) &&
+            (col == 2 || col == 6 || col == 8 || col == 12) ||
+        (row == 0 || row == 7 || col == 14) && (col == 3 || col == 11)) {
+      return SquareType.doubleLetter;
+    }
 
-// Optional: Helper method to get square color
-Color getSquareColor(SquareType type) {
-  switch (type) {
-    case SquareType.normal:
-      return Colors.white;
-    case SquareType.doubleLetter:
-      return Colors.lightBlue[50]!; // Light blue
-    case SquareType.tripleLetter:
-      return Colors.blue[100]!; // Dark blue
-    case SquareType.doubleWord:
-      return Colors.pink[50]!; // Pink
-    case SquareType.tripleWord:
-      return Colors.red[100]!; // Red
-    case SquareType.center:
-      return Colors.pink[50]!; // Same as DW
-  }
-}
-```\n
+    return SquareType.normal;
+  }```\n
 \n### src/models/move.dart\n
 ```dart
 // lib/src/models/move.dart
@@ -1015,6 +888,7 @@ class GameSessionsListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Available Games'),
@@ -1040,16 +914,21 @@ class GameSessionsListScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.sports_esports_outlined, size: 64, color: Colors.grey),
+                  Icon(Icons.sports_esports_outlined,
+                      size: 64,
+                      color: theme.colorScheme.onSurface.withOpacity(0.7)),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'No active game sessions',
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                    style: TextStyle(
+                        fontSize: 18,
+                        color: theme.colorScheme.onSurface.withOpacity(0.7)),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Wait for a moderator to start a game',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7)),
                   ),
                 ],
               ),
@@ -1069,6 +948,7 @@ class GameSessionsListScreen extends StatelessWidget {
   }
 
   Widget _buildSessionCard(BuildContext context, GameSession session) {
+    final theme = Theme.of(context);
     final dateFormat = DateFormat('MMM d, y – h:mm a');
 
     return Card(
@@ -1106,10 +986,10 @@ class GameSessionsListScreen extends StatelessWidget {
                                   color: Colors.green,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   'Live',
                                   style: TextStyle(
-                                    color: Colors.white,
+                                    color: theme.colorScheme.onPrimary,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -1120,14 +1000,15 @@ class GameSessionsListScreen extends StatelessWidget {
                         Text(
                           dateFormat.format(session.startTime),
                           style: TextStyle(
-                            color: Colors.grey[600],
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
                             fontSize: 12,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: Colors.grey),
+                  Icon(Icons.chevron_right,
+                      color: theme.colorScheme.onSurface.withOpacity(0.7)),
                 ],
               ),
               if (session.isActive) ...[
@@ -1153,16 +1034,20 @@ class GameSessionsListScreen extends StatelessWidget {
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildStatItem('Moves', stats['totalMoves']?.toString() ?? '0'),
-            _buildStatItem('Letters Remaining', stats['remainingLetters']?.toString() ?? '-'),
-            _buildStatItem('Duration', _formatDuration(session.startTime)),
+            _buildStatItem(
+                context, 'Moves', stats['totalMoves']?.toString() ?? '0'),
+            _buildStatItem(context, 'Letters Remaining',
+                stats['remainingLetters']?.toString() ?? '-'),
+            _buildStatItem(
+                context, 'Duration', _formatDuration(session.startTime)),
           ],
         );
       },
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
+  Widget _buildStatItem(context, String label, String value) {
+    final theme = Theme.of(context);
     return Column(
       children: [
         Text(
@@ -1176,7 +1061,7 @@ class GameSessionsListScreen extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
         ),
       ],
@@ -1193,7 +1078,7 @@ class GameSessionsListScreen extends StatelessWidget {
   void _joinSession(BuildContext context, GameSession session) async {
     try {
       await context.read<GameStateProvider>().initializeGame(session.id);
-      
+
       if (context.mounted) {
         Navigator.pushReplacement(
           context,
@@ -1210,7 +1095,8 @@ class GameSessionsListScreen extends StatelessWidget {
       }
     }
   }
-}```\n
+}
+```\n
 \n### src/screens/home_screen.dart\n
 ```dart
 import 'package:flutter/material.dart';
@@ -1250,8 +1136,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _handleExplanationToggle(
       GameStateProvider gameState, Move move) async {
+    final theme = Theme.of(context);
     try {
-      await gameState.handleMoveExplanation(move);
+      await gameState.handleMoveExplanation(theme.colorScheme.tertiary, move);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1348,17 +1235,19 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(
               color: _showSettings
                   ? theme.colorScheme.tertiary.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.3),
+                  : theme.colorScheme.onBackground.withOpacity(0.3),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: _showSettings
                     ? theme.colorScheme.tertiary
-                    : Colors.white.withOpacity(0.1),
+                    : theme.colorScheme.onPrimary.withOpacity(0.1),
               ),
             ),
             child: Icon(
               Icons.settings,
-              color: _showSettings ? theme.colorScheme.tertiary : Colors.white,
+              color: _showSettings
+                  ? theme.colorScheme.tertiary
+                  : theme.colorScheme.onPrimary,
               size: 24,
             ),
           ),
@@ -1392,15 +1281,15 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Game Assistant',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: theme.colorScheme.onPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
+                    icon: Icon(Icons.close, color: theme.colorScheme.onPrimary),
                     onPressed: () => setState(() => _showChat = false),
                   ),
                 ],
@@ -1621,7 +1510,6 @@ class FirebaseService {
 import 'package:cloud_text_to_speech/cloud_text_to_speech.dart';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AIService {
   late GenerativeModel _model;
@@ -1631,12 +1519,13 @@ class AIService {
         .generativeModel(model: 'gemini-2.0-flash-exp');
     // Initialize TTS with Google provider
     TtsGoogle.init(
-      apiKey: dotenv.get('GOOGLE_CLOUD_API_KEY'),
+      apiKey: const String.fromEnvironment('GOOGLE_CLOUD_API_KEY'),
       withLogs: true, // Set to false in production
     );
   }
 
-  Future<String> generateMoveExplanation(String playerName, Move move, int currentScore) async {
+  Future<String> generateMoveExplanation(
+      String playerName, Move move, int currentScore) async {
     try {
       final prompt = '''
       Explain this Scrabble move played by $playerName in a concise and engaging way:
@@ -1701,7 +1590,7 @@ class AIService {
   Future<List<int>> convertToSpeech(String text) async {
     // Get voices
     final voicesResponse = await TtsGoogle.getVoices();
-    
+
     //Pick an English Voice
     final voice = voicesResponse.voices
         .where((element) => element.name.startsWith('Mason'))
@@ -1709,10 +1598,10 @@ class AIService {
         .first;
 
     TtsParamsGoogle params = TtsParamsGoogle(
-        voice: voice,
-        audioFormat: AudioOutputFormatGoogle.linear16,
-        text: text,
-        );
+      voice: voice,
+      audioFormat: AudioOutputFormatGoogle.linear16,
+      text: text,
+    );
 
     final ttsResponse = await TtsGoogle.convertTts(params);
 
@@ -1728,134 +1617,12 @@ class AIService {
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 
-abstract class AppThemeBase {
-  // Abstract getters that all themes must implement
-  Color get primaryColor;
-  Color get secondaryColor;
-  Color get accentColor;
-  Color get backgroundColor;
-  
-  // Common theme data builder
-  ThemeData get theme => ThemeData(
-    primaryColor: primaryColor,
-    scaffoldBackgroundColor: backgroundColor,
-    appBarTheme: AppBarTheme(
-      backgroundColor: primaryColor,
-      elevation: 0,
-      centerTitle: false,
-      iconTheme: IconThemeData(color: accentColor),
-      titleTextStyle: const TextStyle(
-        color: Colors.white,
-        fontSize: 24,
-        fontWeight: FontWeight.bold,
-      ),
-    ),
-    bottomNavigationBarTheme: BottomNavigationBarThemeData(
-      backgroundColor: primaryColor,
-      selectedItemColor: accentColor,
-      unselectedItemColor: Colors.white54,
-    ),
-    // Add more common theme properties
-    cardColor: primaryColor,
-    dividerColor: Colors.white24,
-    colorScheme: ColorScheme.dark(
-      primary: primaryColor,
-      secondary: secondaryColor,
-      tertiary: accentColor,
-      background: backgroundColor,
-    ),
-  );
-}
-
-// Modern Dark Theme
-class DarkTheme extends AppThemeBase {
-  @override
-  Color get primaryColor => const Color(0xFF1A1A2E);
-  
-  @override
-  Color get secondaryColor => const Color(0xFF16213E);
-  
-  @override
-  Color get accentColor => const Color(0xFF00FF95);
-  
-  @override
-  Color get backgroundColor => const Color(0xFF0F0F1A);
-}
-
-// Light Theme
-class LightTheme extends AppThemeBase {
-  @override
-  Color get primaryColor => const Color(0xFFF8F9FA);
-  
-  @override
-  Color get secondaryColor => const Color(0xFFE9ECEF);
-  
-  @override
-  Color get accentColor => const Color(0xFF6C63FF);
-  
-  @override
-  Color get backgroundColor => Colors.white;
-
-  @override
-  ThemeData get theme => ThemeData(
-    primaryColor: primaryColor,
-    scaffoldBackgroundColor: backgroundColor,
-    appBarTheme: AppBarTheme(
-      backgroundColor: primaryColor,
-      elevation: 0,
-      centerTitle: false,
-      iconTheme: IconThemeData(color: accentColor),
-      titleTextStyle: const TextStyle(
-        color: Color(0xFF2D3436),
-        fontSize: 24,
-        fontWeight: FontWeight.bold,
-      ),
-    ),
-    bottomNavigationBarTheme: BottomNavigationBarThemeData(
-      backgroundColor: primaryColor,
-      selectedItemColor: accentColor,
-      unselectedItemColor: const Color(0xFF95A5A6),
-    ),
-    cardColor: primaryColor,
-    dividerColor: Colors.black12,
-    colorScheme: ColorScheme.light(
-      primary: primaryColor,
-      secondary: secondaryColor,
-      tertiary: accentColor,
-      background: backgroundColor,
-    ),
-  );
-}
-
-// Nature Theme
-class NatureTheme extends AppThemeBase {
-  @override
-  Color get primaryColor => const Color(0xFF2D5A27);
-  
-  @override
-  Color get secondaryColor => const Color(0xFF4A8B3C);
-  
-  @override
-  Color get accentColor => const Color(0xFFFFC857);
-  
-  @override
-  Color get backgroundColor => const Color(0xFFF7F7F2);
-}
-
-// Theme extensions for easy access to current theme colors
-extension ThemeExtension on ThemeData {
-  Color get primaryColor => colorScheme.primary;
-  Color get secondaryColor => colorScheme.secondary;
-  Color get accentColor => colorScheme.tertiary;
-  Color get backgroundColor => colorScheme.background;
-}
-
 // Static access to theme instances
 class AppTheme {
-  static final dark = DarkTheme();
+  static final dark = DarkAppleTheme();
   static final light = LightTheme();
   static final nature = NatureTheme();
-  
+
   static ThemeData getThemeData(AppThemeMode mode) {
     switch (mode) {
       case AppThemeMode.dark:
@@ -1866,14 +1633,295 @@ class AppTheme {
         return nature.theme;
     }
   }
-}```\n
+}
+
+abstract class AppThemeBase {
+  // Abstract getters that all themes must implement
+  Color get primaryColor;
+  Color get secondaryColor;
+  Color get accentColor;
+  Color get backgroundColor;
+
+  // Common theme data builder
+  ThemeData get theme => ThemeData(
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: backgroundColor,
+        appBarTheme: AppBarTheme(
+          backgroundColor: primaryColor,
+          elevation: 0,
+          centerTitle: false,
+          iconTheme: IconThemeData(color: accentColor),
+          titleTextStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: primaryColor,
+          selectedItemColor: accentColor,
+          unselectedItemColor: Colors.white54,
+        ),
+        // Add more common theme properties
+        cardColor: primaryColor,
+        dividerColor: Colors.white24,
+        colorScheme: ColorScheme.dark(
+          primary: primaryColor,
+          secondary: secondaryColor,
+          tertiary: accentColor,
+          background: backgroundColor,
+        ),
+      );
+}
+
+class EmberTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFF0C0C0C);
+
+  @override
+  Color get secondaryColor => const Color(0xFF481E14);
+
+  @override
+  Color get accentColor => const Color(0xFF9B3922);
+
+  @override
+  Color get backgroundColor =>
+      const Color(0xFFF2613F); // Very distinctive background
+
+  @override
+  ThemeData get theme => ThemeData(
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: backgroundColor,
+        cardColor: secondaryColor, // Or a slightly lighter version
+        dividerColor: const Color(0xFF7A2A18), // Adjusted divider color
+        colorScheme: ColorScheme.dark(
+          // Dark scheme because of the primary color
+          primary: primaryColor,
+          secondary: secondaryColor,
+          tertiary: accentColor,
+          background: backgroundColor,
+          surface: primaryColor, // Or secondary
+          onPrimary: Colors.white, // White text on primary
+          onSecondary: Colors.white, // White text on secondary
+          onSurface: Colors.white, // White text on surface
+          onBackground: Colors.white, // Text on background
+        ),
+      );
+}
+
+class FireTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFF1D1616);
+
+  @override
+  Color get secondaryColor => const Color(0xFF8E1616);
+
+  @override
+  Color get accentColor => const Color(0xFFD84040);
+
+  @override
+  Color get backgroundColor => const Color(0xFFEEEEEE);
+
+  @override
+  ThemeData get theme => ThemeData(
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: backgroundColor,
+        cardColor: Colors.white, // Or a very light version of secondaryColor
+        dividerColor: const Color(0xFFC8C8C8), // A bit darker than background
+        colorScheme: ColorScheme.light(
+          // Light scheme because background is light
+          primary: primaryColor,
+          secondary: secondaryColor,
+          tertiary: accentColor,
+          background: backgroundColor,
+          surface: Colors.white,
+          onPrimary: Colors.white, // Text on primary
+          onSecondary: Colors.white, // Text on secondary
+          onSurface: primaryColor, // Dark text on surface
+          onBackground: primaryColor, // Dark text on background
+        ),
+      );
+}
+
+class NatureSecondTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFF123524); // Deep forest green
+
+  @override
+  Color get secondaryColor => const Color(0xFF3E7B27); // Rich emerald
+
+  @override
+  Color get accentColor => const Color(0xFF85A947); // Golden yellow/Light Green
+
+  @override
+  Color get backgroundColor => const Color(0xFFEFE3C2); // Off-white/Light Beige
+
+  @override
+  ThemeData get theme => ThemeData(
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: backgroundColor,
+        cardColor: secondaryColor,
+        dividerColor: const Color(0xFF6AA759), // Adjusted divider color
+        colorScheme: ColorScheme.light(
+          // Light color scheme for this theme
+          primary: primaryColor,
+          secondary: secondaryColor,
+          tertiary: accentColor,
+          background: backgroundColor,
+          surface: Colors.white, // Or a very light version of primaryColor
+          onPrimary: Colors.white, // White text on primary
+          onSecondary: Colors.white, // White text on secondary
+          onSurface: const Color(0xFF123524), // Dark text on surface
+          onBackground: const Color(0xFF123524), // Dark text on background
+        ),
+      );
+}
+
+class DarkAppleTheme extends AppThemeBase {
+  @override
+  Color get primaryColor =>
+      const Color(0xFF161618); // Closest to Apple's #161618
+
+  @override
+  Color get secondaryColor => const Color(0xFF212124); // Apple's #212124
+
+  @override
+  Color get accentColor =>
+      const Color(0xFF00E5FF); // Keep your existing accent, or choose a new one
+
+  @override
+  Color get backgroundColor => Colors.black; // Apple's #000000
+
+  @override
+  ThemeData get theme => ThemeData(
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: backgroundColor,
+        cardColor: secondaryColor, // Use secondary for cards
+        dividerColor: const Color(
+            0xFF333336), // A bit lighter than secondary for dividers
+        colorScheme: ColorScheme.dark(
+          primary: primaryColor,
+          secondary: secondaryColor,
+          tertiary: accentColor,
+          background: backgroundColor,
+          surface:
+              primaryColor, // Or secondary, experiment to see what looks best.
+          onPrimary: Colors.white, // Apple uses white text on these backgrounds
+          onSecondary: Colors.white,
+          onSurface: Colors.white,
+          onBackground: Colors.white,
+        ),
+      );
+}
+
+// Dark Theme (Modern & High Contrast)
+class DarkTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFF1E1E2D); // Darker navy
+
+  @override
+  Color get secondaryColor => const Color(0xFF2D2D44); // Deep purple-grey
+
+  @override
+  Color get accentColor => const Color(0xFF00E5FF); // Bright cyan
+
+  @override
+  Color get backgroundColor => const Color(0xFF15151F); // Very dark navy
+
+  @override
+  ThemeData get theme => ThemeData(
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: backgroundColor,
+        cardColor: secondaryColor,
+        dividerColor: const Color(0xFF3F3F5F),
+        colorScheme: ColorScheme.dark(
+          primary: primaryColor,
+          secondary: secondaryColor,
+          tertiary: accentColor,
+          background: backgroundColor,
+          surface: const Color(0xFF252537),
+          onPrimary: Colors.white,
+          onSecondary: Colors.white,
+          onSurface: Colors.white,
+          onBackground: Colors.white,
+        ),
+      );
+}
+
+// Light Theme (Clean & Professional)
+class LightTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFFFFFFFF); // Pure white
+
+  @override
+  Color get secondaryColor => const Color(0xFFF5F5F7); // Light grey
+
+  @override
+  Color get accentColor => const Color(0xFF2563EB); // Royal blue
+
+  @override
+  Color get backgroundColor => const Color(0xFFFAFAFA); // Off-white
+
+  @override
+  ThemeData get theme => ThemeData(
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: backgroundColor,
+        cardColor: primaryColor,
+        dividerColor: const Color(0xFFE5E7EB),
+        colorScheme: ColorScheme.light(
+          primary: primaryColor,
+          secondary: secondaryColor,
+          tertiary: accentColor,
+          background: backgroundColor,
+          surface: const Color(0xFFFFFFFF),
+          onPrimary: const Color(0xFF1F2937), // Dark grey
+          onSecondary: const Color(0xFF1F2937),
+          onSurface: const Color(0xFF1F2937),
+          onBackground: const Color(0xFF1F2937),
+        ),
+      );
+}
+
+// Nature Theme (Forest & Fresh)
+class NatureTheme extends AppThemeBase {
+  @override
+  Color get primaryColor => const Color(0xFF1B4332); // Deep forest green
+
+  @override
+  Color get secondaryColor => const Color(0xFF2D6A4F); // Rich emerald
+
+  @override
+  Color get accentColor => const Color(0xFFFBB91C); // Golden yellow
+
+  @override
+  Color get backgroundColor => const Color(0xFF081C15); // Dark forest
+
+  @override
+  ThemeData get theme => ThemeData(
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: backgroundColor,
+        cardColor: secondaryColor,
+        dividerColor: const Color(0xFF40916C),
+        colorScheme: ColorScheme.dark(
+          primary: primaryColor,
+          secondary: secondaryColor,
+          tertiary: accentColor,
+          background: backgroundColor,
+          surface: const Color(0xFF2D6A4F),
+          onPrimary: Colors.white,
+          onSecondary: Colors.white,
+          onSurface: Colors.white,
+          onBackground: Colors.white,
+        ),
+      );
+}
+```\n
 \n### src/widgets/left_menu.dart\n
 ```dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/move.dart';
-import '../themes/app_themes.dart';
 import '../widgets/player_score_card.dart';
 import '../providers/game_state_provider.dart';
 
@@ -1908,7 +1956,7 @@ class ResponsiveLeftMenu extends StatelessWidget {
         color: theme.primaryColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: theme.colorScheme.onBackground.withOpacity(0.2),
             blurRadius: 8,
             offset: const Offset(3, 0),
           ),
@@ -1956,12 +2004,12 @@ class ResponsiveLeftMenu extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: theme.accentColor.withOpacity(0.1),
+              color: theme.colorScheme.tertiary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               Icons.sports_esports,
-              color: theme.accentColor,
+              color: theme.colorScheme.tertiary,
               size: 24,
             ),
           ),
@@ -1982,7 +2030,7 @@ class ResponsiveLeftMenu extends StatelessWidget {
                 Text(
                   'AI Companion',
                   style: TextStyle(
-                    color: theme.accentColor,
+                    color: theme.colorScheme.tertiary,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),
@@ -2081,11 +2129,11 @@ class ResponsiveLeftMenu extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: isActive
-                ? theme.accentColor.withOpacity(0.1)
+                ? theme.colorScheme.tertiary.withOpacity(0.1)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isActive ? theme.accentColor : Colors.transparent,
+              color: isActive ? theme.colorScheme.tertiary : Colors.transparent,
             ),
           ),
           child: Icon(
@@ -2093,7 +2141,7 @@ class ResponsiveLeftMenu extends StatelessWidget {
             color: !isEnabled
                 ? theme.colorScheme.onPrimary.withOpacity(0.3)
                 : isActive
-                    ? theme.accentColor
+                    ? theme.colorScheme.tertiary
                     : theme.colorScheme.onPrimary.withOpacity(0.7),
             size: 24,
           ),
@@ -2154,6 +2202,7 @@ class PlayerHistorySheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -2192,7 +2241,8 @@ class PlayerHistorySheet extends StatelessWidget {
                           backgroundColor: player.color,
                           child: Text(
                             move.word[0],
-                            style: const TextStyle(color: Colors.white),
+                            style:
+                                TextStyle(color: theme.colorScheme.onPrimary),
                           ),
                         ),
                         title: Text(move.word),
@@ -2213,7 +2263,125 @@ class PlayerHistorySheet extends StatelessWidget {
       ),
     );
   }
-}```\n
+}
+```\n
+\n### src/widgets/move_controls.dart\n
+```dart
+// widgets/move_controls.dart
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
+import '../providers/game_state_provider.dart';
+import 'package:provider/provider.dart';
+
+class MoveControls extends StatefulWidget {
+  const MoveControls({super.key});
+
+  @override
+  State<MoveControls> createState() => _MoveControlsState();
+}
+
+class _MoveControlsState extends State<MoveControls> {
+  late AudioPlayer _audioPlayer;
+  bool _isPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer = AudioPlayer();
+    _setupAudioPlayer();
+  }
+
+  void _setupAudioPlayer() {
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _isPlaying = false);
+    });
+  }
+
+  Future<void> _handlePlayback(GameStateProvider gameState) async {
+    final theme = Theme.of(context);
+    if (_isPlaying) {
+      await _audioPlayer.pause();
+      setState(() => _isPlaying = false);
+      return;
+    }
+
+    final lastMove = gameState.lastMove;
+    if (lastMove == null) return;
+
+    try {
+      final explanation =
+          await gameState.explainMove(theme.colorScheme.tertiary, lastMove);
+      if (!mounted) return;
+
+      if (explanation.audioData != null) {
+        await _audioPlayer
+            .play(BytesSource(Uint8List.fromList(explanation.audioData!)));
+        setState(() => _isPlaying = true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error playing explanation: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Consumer<GameStateProvider>(
+      builder: (context, gameState, _) {
+        final lastMove = gameState.lastMove;
+        final isEnabled = lastMove != null;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          decoration: BoxDecoration(
+            color: theme.primaryColor.withOpacity(0.1),
+            border: Border(
+              top: BorderSide(
+                color: theme.colorScheme.tertiary.withOpacity(0.3),
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (lastMove != null) ...[
+                Text(
+                  'Last Move: ${lastMove.word}',
+                  style: TextStyle(
+                    color: theme.colorScheme.tertiary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    _isPlaying ? Icons.stop_circle : Icons.play_circle,
+                    color: isEnabled ? theme.colorScheme.tertiary : Colors.grey,
+                    size: 32,
+                  ),
+                  onPressed:
+                      isEnabled ? () => _handlePlayback(gameState) : null,
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+```\n
 \n### src/widgets/move_history_panel.dart\n
 ```dart
 import 'package:flutter/material.dart';
@@ -2225,6 +2393,7 @@ class MoveHistoryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Consumer<GameStateProvider>(
       builder: (context, gameState, child) {
         final distribution = gameState.letterDistribution;
@@ -2281,7 +2450,7 @@ class MoveHistoryPanel extends StatelessWidget {
                       backgroundColor: player.color,
                       child: Text(
                         move.word[0],
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: theme.colorScheme.onPrimary),
                       ),
                     ),
                     title: Text(move.word),
@@ -2321,7 +2490,8 @@ class MoveExplanationControls extends StatefulWidget {
   });
 
   @override
-  State<MoveExplanationControls> createState() => _MoveExplanationControlsState();
+  State<MoveExplanationControls> createState() =>
+      _MoveExplanationControlsState();
 }
 
 class _MoveExplanationControlsState extends State<MoveExplanationControls> {
@@ -2338,7 +2508,7 @@ class _MoveExplanationControlsState extends State<MoveExplanationControls> {
 
   void _initAudioPlayer() {
     _audioPlayer = AudioPlayer();
-    
+
     _audioPlayer.onDurationChanged.listen((duration) {
       if (mounted) setState(() => _duration = duration);
     });
@@ -2364,12 +2534,13 @@ class _MoveExplanationControlsState extends State<MoveExplanationControls> {
       await _audioPlayer.pause();
     } else {
       if (_position == Duration.zero) {
-     await _audioPlayer.play(BytesSource(Uint8List.fromList(widget.explanation.audioData!)));
+        await _audioPlayer.play(
+            BytesSource(Uint8List.fromList(widget.explanation.audioData!)));
       } else {
         await _audioPlayer.resume();
       }
     }
-    
+
     setState(() => _isPlaying = !_isPlaying);
   }
 
@@ -2435,8 +2606,9 @@ class _MoveExplanationControlsState extends State<MoveExplanationControls> {
                       children: [
                         Text(
                           _formatDuration(_position),
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          style: TextStyle(
+                            color:
+                                theme.colorScheme.onPrimary.withOpacity(0.70),
                             fontSize: 12,
                           ),
                         ),
@@ -2451,9 +2623,11 @@ class _MoveExplanationControlsState extends State<MoveExplanationControls> {
                                 overlayRadius: 14,
                               ),
                               activeTrackColor: theme.colorScheme.tertiary,
-                              inactiveTrackColor: Colors.white24,
+                              inactiveTrackColor:
+                                  theme.colorScheme.onPrimary.withOpacity(0.24),
                               thumbColor: theme.colorScheme.tertiary,
-                              overlayColor: theme.colorScheme.tertiary.withOpacity(0.2),
+                              overlayColor:
+                                  theme.colorScheme.tertiary.withOpacity(0.2),
                             ),
                             child: Slider(
                               min: 0,
@@ -2467,8 +2641,9 @@ class _MoveExplanationControlsState extends State<MoveExplanationControls> {
                         ),
                         Text(
                           _formatDuration(_duration),
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          style: TextStyle(
+                            color:
+                                theme.colorScheme.onPrimary.withOpacity(0.70),
                             fontSize: 12,
                           ),
                         ),
@@ -2479,25 +2654,26 @@ class _MoveExplanationControlsState extends State<MoveExplanationControls> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  _audioPlayer.stop();
-                  widget.onClose();
-                },
-                color: Colors.white70,
-              ),
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _audioPlayer.stop();
+                    widget.onClose();
+                  },
+                  color: theme.colorScheme.onPrimary.withOpacity(0.70)),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             widget.explanation.text,
-            style: const TextStyle(color: Colors.white70),
+            style:
+                TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.70)),
           ),
         ],
       ),
     );
   }
-}```\n
+}
+```\n
 \n### src/widgets/player_score_card.dart\n
 ```dart
 import 'package:flutter/material.dart';
@@ -2525,12 +2701,12 @@ class PlayerScoreCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isCurrentPlayer
             ? theme.colorScheme.tertiary.withOpacity(0.1)
-            : Colors.white.withOpacity(0.05),
+            : theme.colorScheme.onPrimary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isCurrentPlayer
               ? theme.colorScheme.tertiary
-              : Colors.white.withOpacity(0.1),
+              : theme.colorScheme.onPrimary.withOpacity(0.1),
           width: isCurrentPlayer ? 2 : 1,
         ),
         boxShadow: [
@@ -2555,8 +2731,8 @@ class PlayerScoreCard extends StatelessWidget {
                   children: [
                     Text(
                       player.displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: theme.colorScheme.onPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -2570,7 +2746,7 @@ class PlayerScoreCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: isCurrentPlayer
                                 ? theme.colorScheme.tertiary
-                                : Colors.white.withOpacity(0.3),
+                                : theme.colorScheme.onPrimary.withOpacity(0.3),
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -2580,7 +2756,7 @@ class PlayerScoreCard extends StatelessWidget {
                           style: TextStyle(
                             color: isCurrentPlayer
                                 ? theme.colorScheme.tertiary
-                                : Colors.white.withOpacity(0.5),
+                                : theme.colorScheme.onPrimary.withOpacity(0.5),
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -2608,8 +2784,8 @@ class PlayerScoreCard extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(
           color: isCurrentPlayer
-              ? theme.accentColor
-              : Colors.white.withOpacity(0.2),
+              ? theme.colorScheme.tertiary
+              : theme.colorScheme.onPrimary.withOpacity(0.2),
           width: 2,
         ),
       ),
@@ -2619,12 +2795,12 @@ class PlayerScoreCard extends StatelessWidget {
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             return Container(
-              color: Colors.white.withOpacity(0.1),
+              color: theme.colorScheme.onPrimary.withOpacity(0.1),
               child: Icon(
                 Icons.person,
                 color: isCurrentPlayer
-                    ? theme.accentColor
-                    : Colors.white.withOpacity(0.5),
+                    ? theme.colorScheme.tertiary
+                    : theme.colorScheme.onPrimary.withOpacity(0.5),
                 size: 32,
               ),
             );
@@ -2639,7 +2815,7 @@ class PlayerScoreCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.2),
+        color: theme.colorScheme.onBackground.withOpacity(0.2),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -2647,14 +2823,14 @@ class PlayerScoreCard extends StatelessWidget {
         children: [
           Icon(
             Icons.stars_rounded,
-            color: theme.accentColor,
+            color: theme.colorScheme.tertiary,
             size: 20,
           ),
           const SizedBox(width: 8),
           Text(
             '$score',
             style: TextStyle(
-              color: theme.accentColor,
+              color: theme.colorScheme.tertiary,
               fontSize: 24,
               fontWeight: FontWeight.bold,
             ),
@@ -2663,7 +2839,7 @@ class PlayerScoreCard extends StatelessWidget {
           Text(
             'points',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: theme.colorScheme.onPrimary.withOpacity(0.7),
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -2682,6 +2858,8 @@ import 'package:provider/provider.dart';
 import '../providers/game_state_provider.dart';
 import '../models/board_square.dart';
 import '../models/tile.dart';
+import 'dart:math' as math;
+
 // lib/widgets/board_widget.dart
 class BoardWidget extends StatefulWidget {
   const BoardWidget({super.key});
@@ -2740,7 +2918,7 @@ class _BoardWidgetState extends State<BoardWidget> {
                   final row = index ~/ 15;
                   final col = index % 15;
                   final square = gameState.board[row][col];
-                  
+
                   return _buildSquare(square, gameState);
                 },
               ),
@@ -2762,70 +2940,96 @@ class _BoardWidgetState extends State<BoardWidget> {
           : _buildSquareContent(square.type),
     );
   }
-Widget _buildTile(Tile tile, GameStateProvider gameState) {
+
+  Widget _buildTile(Tile tile, GameStateProvider gameState) {
     final player = gameState.players.firstWhere(
       (p) => p.id == tile.playerId,
       orElse: () => gameState.players[0],
     );
 
     return AnimatedScale(
-      scale: tile.isNew ? 0.0 : 1.0,
+      scale: tile.isNew? 0.0: 1.0,
       duration: const Duration(milliseconds: 500),
       curve: Curves.elasticOut,
       child: AnimatedRotation(
-        turns: tile.isNew ? -0.5 : 0,
+        turns: tile.isNew? -0.5: 0,
         duration: const Duration(milliseconds: 500),
         curve: Curves.elasticOut,
-        child: Container(
-          margin: const EdgeInsets.all(1),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF7D698),
-            borderRadius: BorderRadius.circular(4),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 2,
-                offset: const Offset(1, 1),
+        child: Transform(
+          transform: Matrix4.identity()
+          ..setEntry(3, 2, 0.0015)
+          ..rotateX(-math.pi / 12),
+          alignment: Alignment.center,
+          child: Container(
+            margin: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFFF7E7C6),
+                  Color(0xFFF5D08A),
+                ],
               ),
-            ],
-            border: Border.all(
-              color: player.color,
-              width: 2,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 5,
+                  offset: const Offset(2, 3),
+                ),
+              ],
+              border: Border.all(
+                color: player.color,
+                width: 2,
+              ),
             ),
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Letter - left aligned
-              Positioned(
-                left: 4,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: Text(
-                    tile.letter,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned(
+                  left: 4,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: Text(
+                      tile.letter,
+                      style:  TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 2,
+                            color: Colors.black.withOpacity(0.2),
+                            offset: const Offset(1, 1),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              // Points - right aligned
-              Positioned(
-                right: 2,
-                bottom: 1,
-                child: Text(
-                  '${tile.points}',
-                  style: const TextStyle(
-                    fontSize: 7,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black54,
+                Positioned(
+                  right: 2,
+                  bottom: 1,
+                  child: Text(
+                    '${tile.points}',
+                    style:  TextStyle(
+                      fontSize: 7,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                      shadows: [
+                        Shadow(
+                          blurRadius: 1,
+                          color: Colors.black.withOpacity(0.2),
+                          offset: const Offset(0.5, 0.5),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2870,21 +3074,27 @@ Widget _buildTile(Tile tile, GameStateProvider gameState) {
 
   Color _getSquareColor(SquareType type) {
     switch (type) {
-      case SquareType.tripleWord:
-        return Colors.red[100]!;
-      case SquareType.doubleWord:
-        return Colors.pink[50]!;
-      case SquareType.tripleLetter:
-        return Colors.blue[100]!;
-      case SquareType.doubleLetter:
-        return Colors.lightBlue[50]!;
-      case SquareType.center:
-        return Colors.pink[50]!;
-      default:
+      case SquareType.normal:
         return Colors.white;
+
+      case SquareType.doubleLetter:
+        return Colors.lightBlue[50]!; // Light blue
+
+      case SquareType.tripleLetter:
+        return const Color.fromARGB(255, 131, 192, 242); // Dark blue
+
+      case SquareType.doubleWord:
+        return Colors.pink[50]!; // Pink
+
+      case SquareType.tripleWord:
+        return const Color.fromARGB(255, 240, 113, 125); // Red
+
+      case SquareType.center:
+        return Colors.pink[50]!; // Same as DW
     }
   }
-}```\n
+}
+```\n
 \n### src/widgets/settings_panel.dart\n
 ```dart
 // lib/src/widgets/settings_panel.dart
@@ -3295,7 +3505,6 @@ dependencies:
   firebase_vertexai: ^1.1.1
   audioplayers: ^6.1.1
   cloud_text_to_speech: ^1.1.3
-  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -3316,7 +3525,6 @@ flutter:
   # Assets
   assets:
     - assets/images/
-    - .env
 
 # Flutter Launcher Icons configuration (customize as needed)
 flutter_launcher_icons:
