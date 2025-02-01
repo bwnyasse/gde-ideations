@@ -91,20 +91,4 @@ String getSquareDescription(SquareType type) {
   }
 }
 
-// Optional: Helper method to get square color
-Color getSquareColor(SquareType type) {
-  switch (type) {
-    case SquareType.normal:
-      return Colors.white;
-    case SquareType.doubleLetter:
-      return Colors.lightBlue[50]!; // Light blue
-    case SquareType.tripleLetter:
-      return Colors.blue[100]!; // Dark blue
-    case SquareType.doubleWord:
-      return Colors.pink[50]!; // Pink
-    case SquareType.tripleWord:
-      return Colors.red[100]!; // Red
-    case SquareType.center:
-      return Colors.pink[50]!; // Same as DW
-  }
-}
+

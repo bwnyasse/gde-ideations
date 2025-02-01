@@ -194,18 +194,23 @@ class _BoardWidgetState extends State<BoardWidget> {
 
   Color _getSquareColor(SquareType type) {
     switch (type) {
-      case SquareType.tripleWord:
-        return Colors.red[100]!;
-      case SquareType.doubleWord:
-        return Colors.pink[50]!;
-      case SquareType.tripleLetter:
-        return Colors.blue[100]!;
-      case SquareType.doubleLetter:
-        return Colors.lightBlue[50]!;
-      case SquareType.center:
-        return Colors.pink[50]!;
-      default:
+      case SquareType.normal:
         return Colors.white;
+
+      case SquareType.doubleLetter:
+        return Colors.lightBlue[50]!; // Light blue
+
+      case SquareType.tripleLetter:
+        return const Color.fromARGB(255, 131, 192, 242); // Dark blue
+
+      case SquareType.doubleWord:
+        return Colors.pink[50]!; // Pink
+
+      case SquareType.tripleWord:
+        return const Color.fromARGB(255, 240, 113, 125); // Red
+
+      case SquareType.center:
+        return Colors.pink[50]!; // Same as DW
     }
   }
 }
