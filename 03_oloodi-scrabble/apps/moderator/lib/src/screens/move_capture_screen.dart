@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:oloodi_scrabble_moderator_app/src/services/recognition_metrics_service.dart';
 import 'package:oloodi_scrabble_moderator_app/src/widgets/board_overlay_painter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -297,6 +296,23 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Word Editor
+                    TextField(
+                      controller: TextEditingController(text: word),
+                      decoration: const InputDecoration(
+                        labelText: 'Word',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          word = value.toUpperCase();
+                          hasBeenEdited = true;
+                        });
+                      },
+                      textCapitalization: TextCapitalization.characters,
+                    ),
+                    const SizedBox(height: 16),
+
                     // Starting position editor
                     Row(
                       children: [
@@ -394,7 +410,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     ),
                     const SizedBox(height: 16),
 
-                    // Preview of tiles
+                    // Tiles editor
                     const Text(
                       'Tile Positions:',
                       style: TextStyle(fontWeight: FontWeight.bold),
@@ -403,11 +419,35 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     ...editableTiles.asMap().entries.map((entry) {
                       final index = entry.key;
                       final tile = entry.value;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          '${tile['letter']}: Row ${tile['row']}, Col ${tile['col']}',
-                          style: const TextStyle(fontFamily: 'monospace'),
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Theme.of(context).primaryColor,
+                            child: Text(
+                              tile['letter'],
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                          title: Text(
+                              '${tile['letter']}: Points ${tile['points']}'),
+                          subtitle: Text(
+                            'Row ${tile['row']}, Col ${tile['col']}',
+                            style: const TextStyle(fontFamily: 'monospace'),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => _showTileEditor(
+                              context,
+                              tile,
+                              (updatedTile) {
+                                setState(() {
+                                  editableTiles[index] = updatedTile;
+                                  hasBeenEdited = true;
+                                });
+                              },
+                            ),
+                          ),
                         ),
                       );
                     }),
@@ -432,9 +472,10 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   child: const Text('Retake'),
                 ),
                 TextButton(
-                  onPressed: () async {
+                  onPressed: () {
+                    // Save recognition metrics if needed
                     if (hasBeenEdited) {
-                      // Save recognition metrics if needed
+                      // TODO: Save metrics
                     }
                     Navigator.pop(context, true);
                   },
@@ -451,6 +492,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     );
   }
 
+// Helper method to recalculate positions (preserved from original implementation)
   void _recalculatePositions(
     List<Map<String, dynamic>> tiles, {
     required int startRow,
@@ -468,6 +510,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     }
   }
 
+// Enhanced tile editor dialog
   Future<void> _showTileEditor(
     BuildContext context,
     Map<String, dynamic> tile,
@@ -476,47 +519,34 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     final letterController = TextEditingController(text: tile['letter']);
     final pointsController =
         TextEditingController(text: tile['points'].toString());
-    final rowController = TextEditingController(text: tile['row'].toString());
-    final colController = TextEditingController(text: tile['col'].toString());
 
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Edit Tile'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: letterController,
-                  decoration: const InputDecoration(labelText: 'Letter'),
-                  textCapitalization: TextCapitalization.characters,
-                  maxLength: 1,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: letterController,
+                decoration: const InputDecoration(
+                  labelText: 'Letter',
+                  border: OutlineInputBorder(),
                 ),
-                TextField(
-                  controller: pointsController,
-                  decoration: const InputDecoration(labelText: 'Points'),
-                  keyboardType: TextInputType.number,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 1,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pointsController,
+                decoration: const InputDecoration(
+                  labelText: 'Points',
+                  border: OutlineInputBorder(),
                 ),
-                TextField(
-                  controller: rowController,
-                  decoration: const InputDecoration(
-                    labelText: 'Row',
-                    helperText: 'Valid range: 0-14',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                TextField(
-                  controller: colController,
-                  decoration: const InputDecoration(
-                    labelText: 'Column',
-                    helperText: 'Valid range: 0-14',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ],
-            ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -525,19 +555,8 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             ),
             TextButton(
               onPressed: () {
-                // Validate input
-                final row = int.tryParse(rowController.text);
-                final col = int.tryParse(colController.text);
                 final points = int.tryParse(pointsController.text);
-
-                if (letterController.text.isEmpty ||
-                    row == null ||
-                    row < 0 ||
-                    row > 14 ||
-                    col == null ||
-                    col < 0 ||
-                    col > 14 ||
-                    points == null) {
+                if (letterController.text.isEmpty || points == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter valid values'),
@@ -547,12 +566,11 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   return;
                 }
 
-                onUpdate({
-                  'letter': letterController.text.toUpperCase(),
-                  'points': points,
-                  'row': row,
-                  'col': col,
-                });
+                final updatedTile = Map<String, dynamic>.from(tile)
+                  ..['letter'] = letterController.text.toUpperCase()
+                  ..['points'] = points;
+
+                onUpdate(updatedTile);
                 Navigator.pop(context);
               },
               child: const Text('Save'),
