@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/ai_service_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/screens/game_sessions_list_screen.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
@@ -14,15 +15,30 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
+    
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => GameStateProvider()),
-        ChangeNotifierProvider(create: (_) => SettingsProvider(prefs)),
+        ChangeNotifierProvider(
+          create: (_) => SettingsProvider(prefs),
+        ),
+        ChangeNotifierProxyProvider<SettingsProvider, AIServiceProvider>(
+          create: (context) => AIServiceProvider(
+            context.read<SettingsProvider>(),
+          ),
+          update: (context, settings, previous) =>
+              previous ?? AIServiceProvider(settings),
+        ),
+        ChangeNotifierProxyProvider<AIServiceProvider, GameStateProvider>(
+          create: (context) => GameStateProvider(
+            context.read<AIServiceProvider>().service,
+          ),
+          update: (context, aiServiceProvider, previous) =>
+              previous ?? GameStateProvider(aiServiceProvider.service),
+        ),
       ],
       child: const ScrabbleAIApp(),
     ),
@@ -34,18 +50,21 @@ class ScrabbleAIApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+// Access settings
     final settings = context.watch<SettingsProvider>();
+
+// Access AI service
+    final aiService = context.read<AIServiceProvider>().service;
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => GameStateProvider()),
+        ChangeNotifierProvider(create: (_) => GameStateProvider(aiService)),
       ],
       child: MaterialApp(
         title: 'Oloodi Scrabble Companion',
-        theme: AppTheme.getThemeData(settings.themeMode), // Use 
+        theme: AppTheme.getThemeData(settings.themeMode), // Use
         debugShowCheckedModeBanner: false,
         home: const GameSessionsListScreen(),
       ),
     );
   }
-
 }

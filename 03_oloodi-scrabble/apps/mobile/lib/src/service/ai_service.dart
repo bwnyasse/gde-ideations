@@ -1,88 +1,53 @@
 import 'package:cloud_text_to_speech/cloud_text_to_speech.dart';
-import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/llm/llm_service.dart';
 
 class AIService {
-  late GenerativeModel _model;
+  final LLMService _llmService;
+  bool _isTtsInitialized = false;
 
-  AIService() {
-    _model = FirebaseVertexAI.instance
-        .generativeModel(model: 'gemini-2.0-flash-exp');
-    // Initialize TTS with Google provider
-    TtsGoogle.init(
-      apiKey: const String.fromEnvironment('GOOGLE_CLOUD_API_KEY'),
-      withLogs: true, // Set to false in production
-    );
+  AIService(SettingsProvider settings) : _llmService = LLMService(settings) {
+    _initializeTts();
   }
 
-  Future<String> generateMoveExplanation(
-      String playerName, Move move, int currentScore) async {
+  Future<void> _initializeTts() async {
     try {
-      final prompt = '''
-      Explain this Scrabble move played by $playerName in a concise and engaging way:
-      - Word: ${move.word}
-      - Score for this move: ${move.score} points
-      - Tiles placed: ${move.tiles.map((t) => '${t.letter}(${t.points})').join(', ')}
-      - Current total score after this move: $currentScore points
-      
-      Please explain:
-      1. Like you were talking directly to the player
-      2. Why this is a good move
-      3. How the score was calculated
-      4. Any strategic implications
-      Keep it brief but informative in 2 sentences maximum.
-      ''';
-
-      final response = await _model.generateContent([
-        Content.multi([
-          TextPart(prompt),
-        ]),
-      ]);
-
-      if (response.text == null) {
-        throw Exception('Empty response from Gemini');
-      }
-
-      // Clean markdown from the response for display
-      final cleanedText = _cleanMarkdownText(response.text!);
-      return cleanedText;
+      TtsGoogle.init(
+        apiKey: const String.fromEnvironment('GOOGLE_CLOUD_API_KEY'),
+        withLogs: true,
+      );
+      _isTtsInitialized = true;
+      debugPrint('TTS initialized successfully');
     } catch (e) {
-      throw Exception('Failed to generate move explanation: $e');
+      debugPrint('Failed to initialize TTS: $e');
+      _isTtsInitialized = false;
     }
   }
 
-  String _cleanMarkdownText(String markdown) {
-    // Remove headers
-    var cleaned = markdown.replaceAll(RegExp(r'#{1,6}\s.*\n'), '');
+  Future<String> generateMoveExplanation(
+    String playerName,
+    Move move,
+    int currentScore,
+  ) async {
+    return _llmService.generateMoveExplanation(playerName, move, currentScore);
+  }
 
-    // Remove bold and italic markers
-    cleaned = cleaned.replaceAll(RegExp(r'\*\*|__|\*|_'), '');
-
-    // Remove code blocks and inline code
-    cleaned = cleaned.replaceAll(RegExp(r'```[\s\S]*?```'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'`[^`]*`'), '');
-
-    // Remove bullet points and numbered lists
-    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*+]\s+', multiLine: true), '');
-    cleaned = cleaned.replaceAll(RegExp(r'^\s*\d+\.\s+', multiLine: true), '');
-
-    // Remove links
-    cleaned = cleaned.replaceAll(RegExp(r'\[([^\]]*)\]\([^\)]*\)'), r'$1');
-
-    // Remove horizontal rules
-    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*_]{3,}\s*'), '');
-
-    // Remove extra whitespace
-    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ');
-
-    return cleaned.trim();
+  Future<void> switchProvider(LLMProvider newProvider) async {
+    await _llmService.switchProvider(newProvider);
   }
 
   Future<List<int>> convertToSpeech(String text) async {
-    // Get voices
+    if (!_isTtsInitialized) {
+      await _initializeTts();
+      if (!_isTtsInitialized) {
+        throw Exception('Failed to initialize Text-to-Speech service');
+      }
+    }
+
     final voicesResponse = await TtsGoogle.getVoices();
 
-    //Pick an English Voice
     final voice = voicesResponse.voices
         .where((element) => element.name.startsWith('Mason'))
         .toList(growable: false)
@@ -95,8 +60,10 @@ class AIService {
     );
 
     final ttsResponse = await TtsGoogle.convertTts(params);
-
-    //Get the audio bytes.
     return ttsResponse.audio.buffer.asUint8List().toList();
+  }
+
+  Future<void> dispose() async {
+    await _llmService.dispose();
   }
 }

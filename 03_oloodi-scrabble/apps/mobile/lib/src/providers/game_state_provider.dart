@@ -15,9 +15,8 @@ import '../service/firebase_service.dart';
 
 class GameStateProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
-  final AIService _aiService = AIService();
+  late AIService _aiService;
   Map<String, MoveExplanation> _moveExplanations = {};
-
 
   // Game state
   List<List<BoardSquare>> _board = [];
@@ -38,7 +37,8 @@ class GameStateProvider with ChangeNotifier {
   StreamSubscription? _movesSubscription;
 
   // Constructor
-  GameStateProvider() {
+  GameStateProvider(AIService aiService) {
+    _aiService = aiService;
     _initializeBoard();
   }
 
@@ -66,6 +66,7 @@ class GameStateProvider with ChangeNotifier {
     try {
       final currentScore = getPlayerScore(move.playerId);
       final playerName = getPlayerNameById(color, move.playerId);
+
       final explanation = await _aiService.generateMoveExplanation(
         playerName,
         move,

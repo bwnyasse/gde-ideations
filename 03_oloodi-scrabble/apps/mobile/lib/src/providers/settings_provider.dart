@@ -11,6 +11,8 @@ enum AppThemeMode { dark, light, nature }
 class SettingsProvider with ChangeNotifier {
   final SharedPreferences _prefs;
 
+  VoidCallback? _onProviderChanged;
+
   // Default values
   LLMProvider _llmProvider = LLMProvider.gemini;
   VoiceSynthesisProvider _voiceProvider = VoiceSynthesisProvider.cloudTts;
@@ -32,6 +34,11 @@ class SettingsProvider with ChangeNotifier {
   VoiceSynthesisProvider get voiceProvider => _voiceProvider;
   AppThemeMode get themeMode => _themeMode;
   String get selectedVoice => _selectedVoice;
+
+  // Add method to set the callback
+  void setProviderChangedCallback(VoidCallback callback) {
+    _onProviderChanged = callback;
+  }
 
   // Load settings from SharedPreferences
   void _loadSettings() {
@@ -55,9 +62,23 @@ class SettingsProvider with ChangeNotifier {
 
   // Setters with persistence
   Future<void> setLLMProvider(LLMProvider provider) async {
-    _llmProvider = provider;
-    await _prefs.setInt(_llmProviderKey, provider.index);
-    notifyListeners();
+    try {
+
+      // Update local state and preferences
+      _llmProvider = provider;
+      await _prefs.setInt(_llmProviderKey, provider.index);
+
+      // Notify the callback if set
+      _onProviderChanged?.call();
+
+      // Notify listeners of the change
+      notifyListeners();
+    } catch (e) {
+      // Handle any errors during provider switch
+      debugPrint('Error switching LLM provider: $e');
+      // You might want to show an error message to the user
+      rethrow;
+    }
   }
 
   Future<void> setVoiceProvider(VoiceSynthesisProvider provider) async {

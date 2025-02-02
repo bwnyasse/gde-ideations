@@ -71,6 +71,7 @@ class DefaultFirebaseOptions {
 ```dart
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/ai_service_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/screens/game_sessions_list_screen.dart';
 import 'package:oloodi_scrabble_end_user_app/src/themes/app_themes.dart';
@@ -85,15 +86,30 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
+    
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => GameStateProvider()),
-        ChangeNotifierProvider(create: (_) => SettingsProvider(prefs)),
+        ChangeNotifierProvider(
+          create: (_) => SettingsProvider(prefs),
+        ),
+        ChangeNotifierProxyProvider<SettingsProvider, AIServiceProvider>(
+          create: (context) => AIServiceProvider(
+            context.read<SettingsProvider>(),
+          ),
+          update: (context, settings, previous) =>
+              previous ?? AIServiceProvider(settings),
+        ),
+        ChangeNotifierProxyProvider<AIServiceProvider, GameStateProvider>(
+          create: (context) => GameStateProvider(
+            context.read<AIServiceProvider>().service,
+          ),
+          update: (context, aiServiceProvider, previous) =>
+              previous ?? GameStateProvider(aiServiceProvider.service),
+        ),
       ],
       child: const ScrabbleAIApp(),
     ),
@@ -105,22 +121,41 @@ class ScrabbleAIApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+// Access settings
     final settings = context.watch<SettingsProvider>();
+
+// Access AI service
+    final aiService = context.read<AIServiceProvider>().service;
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => GameStateProvider()),
+        ChangeNotifierProvider(create: (_) => GameStateProvider(aiService)),
       ],
       child: MaterialApp(
         title: 'Oloodi Scrabble Companion',
-        theme: AppTheme.getThemeData(settings.themeMode), // Use 
+        theme: AppTheme.getThemeData(settings.themeMode), // Use
         debugShowCheckedModeBanner: false,
         home: const GameSessionsListScreen(),
       ),
     );
   }
-
 }
 ```\n
+\n### src/constants/llm_config.dart\n
+```dart
+// lib/src/constants/llm_config.dart
+class LLMConfig {
+  // Gemini configuration
+  static const String geminiModelName = 'gemini-2.0-flash-exp';
+
+  // API endpoints
+  static const String claudeDefaultEndpoint = 'https://api.anthropic.com/v1/messages';
+  
+  // Environment variable keys
+  static const String claudeApiKeyEnv = 'CLAUDE_API_KEY';
+  static const String claudeApiEndpointEnv = 'CLAUDE_API_ENDPOINT';
+  static const String deepseekApiKeyEnv = 'DEEPSEEK_API_KEY';
+  static const String o3ApiKeyEnv = 'O3_API_KEY';
+}```\n
 \n### src/providers/game_state_provider.dart\n
 ```dart
 // lib/src/providers/game_state_provider.dart
@@ -140,9 +175,8 @@ import '../service/firebase_service.dart';
 
 class GameStateProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
-  final AIService _aiService = AIService();
+  late AIService _aiService;
   Map<String, MoveExplanation> _moveExplanations = {};
-
 
   // Game state
   List<List<BoardSquare>> _board = [];
@@ -163,7 +197,8 @@ class GameStateProvider with ChangeNotifier {
   StreamSubscription? _movesSubscription;
 
   // Constructor
-  GameStateProvider() {
+  GameStateProvider(AIService aiService) {
+    _aiService = aiService;
     _initializeBoard();
   }
 
@@ -191,6 +226,7 @@ class GameStateProvider with ChangeNotifier {
     try {
       final currentScore = getPlayerScore(move.playerId);
       final playerName = getPlayerNameById(color, move.playerId);
+
       final explanation = await _aiService.generateMoveExplanation(
         playerName,
         move,
@@ -499,6 +535,56 @@ class GameStateProvider with ChangeNotifier {
   }
 }
 ```\n
+\n### src/providers/ai_service_provider.dart\n
+```dart
+import 'package:flutter/foundation.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/ai_service.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
+
+class AIServiceProvider extends ChangeNotifier {
+  late final AIService _aiService;
+  late final SettingsProvider _settings;
+
+  AIServiceProvider(SettingsProvider settings) {
+    _settings = settings;
+    _aiService = AIService(settings);
+
+    // Set up the callback
+    settings.setProviderChangedCallback(() {
+      _handleProviderChanged();
+    });
+  }
+
+  Future<void> _handleProviderChanged() async {
+    try {
+      await _aiService.switchProvider(_settings.llmProvider);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error handling provider change: $e');
+      rethrow;
+    }
+  }
+
+  AIService get service => _aiService;
+
+  // Expose switchProvider method
+  Future<void> switchProvider(LLMProvider newProvider) async {
+    try {
+      await _aiService.switchProvider(newProvider);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error in AIServiceProvider switchProvider: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  void dispose() {
+    _aiService.dispose();
+    super.dispose();
+  }
+}
+```\n
 \n### src/providers/settings_provider.dart\n
 ```dart
 // lib/src/providers/settings_provider.dart
@@ -513,6 +599,8 @@ enum AppThemeMode { dark, light, nature }
 
 class SettingsProvider with ChangeNotifier {
   final SharedPreferences _prefs;
+
+  VoidCallback? _onProviderChanged;
 
   // Default values
   LLMProvider _llmProvider = LLMProvider.gemini;
@@ -536,6 +624,11 @@ class SettingsProvider with ChangeNotifier {
   AppThemeMode get themeMode => _themeMode;
   String get selectedVoice => _selectedVoice;
 
+  // Add method to set the callback
+  void setProviderChangedCallback(VoidCallback callback) {
+    _onProviderChanged = callback;
+  }
+
   // Load settings from SharedPreferences
   void _loadSettings() {
     final llmIndex = _prefs.getInt(_llmProviderKey);
@@ -558,9 +651,23 @@ class SettingsProvider with ChangeNotifier {
 
   // Setters with persistence
   Future<void> setLLMProvider(LLMProvider provider) async {
-    _llmProvider = provider;
-    await _prefs.setInt(_llmProviderKey, provider.index);
-    notifyListeners();
+    try {
+
+      // Update local state and preferences
+      _llmProvider = provider;
+      await _prefs.setInt(_llmProviderKey, provider.index);
+
+      // Notify the callback if set
+      _onProviderChanged?.call();
+
+      // Notify listeners of the change
+      notifyListeners();
+    } catch (e) {
+      // Handle any errors during provider switch
+      debugPrint('Error switching LLM provider: $e');
+      // You might want to show an error message to the user
+      rethrow;
+    }
   }
 
   Future<void> setVoiceProvider(VoiceSynthesisProvider provider) async {
@@ -1307,48 +1414,335 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 ```\n
-\n### src/service/camera_service.dart\n
+\n### src/service/llm/providers/claude_provider.dart\n
 ```dart
-import 'package:camera/camera.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/llm/exceptions/llm_provider_exception.dart';
+import 'dart:convert';
+import '../base_llm_provider.dart';
 
-class CameraService {
-  CameraController? _controller;
-  bool _isInitialized = false;
-
+class ClaudeProvider extends BaseLLMProvider {
+  final String _apiKey;
+  final String _apiEndpoint;
+  
+  ClaudeProvider({
+    required String apiKey,
+    String? apiEndpoint,
+  }) : _apiKey = apiKey,
+       _apiEndpoint = apiEndpoint ?? 'https://api.anthropic.com/v1/messages';
+  
+  @override
   Future<void> initialize() async {
-    final cameras = await availableCameras();
-    if (cameras.isEmpty) throw Exception('No cameras available');
-    
-    _controller = CameraController(
-      cameras.first,
-      ResolutionPreset.high,
-      enableAudio: false,
-    );
-
-    await _controller!.initialize();
-    _isInitialized = true;
+    // Validate API key and connection
+    try {
+      final response = await http.get(
+        Uri.parse(_apiEndpoint),
+        headers: {'X-API-Key': _apiKey},
+      );
+      
+      if (response.statusCode != 200) {
+        throw LLMProviderException('Failed to initialize Claude provider');
+      }
+    } catch (e) {
+      throw LLMProviderException('Claude initialization error: $e');
+    }
   }
-
-  Future<String> captureImage() async {
-    if (!_isInitialized) throw Exception('Camera not initialized');
-    
-    final XFile image = await _controller!.takePicture();
-    final directory = await getTemporaryDirectory();
-    final String filePath = '${directory.path}/${DateTime.now().toIso8601String()}.jpg';
-    
-    await image.saveTo(filePath);
-    return filePath;
+  
+  @override
+  Future<String> generateMoveExplanation(
+    String playerName, 
+    Move move, 
+    int currentScore
+  ) async {
+    try {
+      final prompt = createPrompt(playerName, move, currentScore);
+      
+      final response = await http.post(
+        Uri.parse(_apiEndpoint),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': _apiKey,
+        },
+        body: json.encode({
+          'model': 'claude-3-sonnet-20240229',
+          'messages': [{'role': 'user', 'content': prompt}],
+          'max_tokens': 150,
+        }),
+      );
+      
+      if (response.statusCode != 200) {
+        throw LLMProviderException('Claude API error: ${response.body}');
+      }
+      
+      final data = json.decode(response.body);
+      return data['content'] as String;
+    } catch (e) {
+      throw LLMProviderException('Failed to generate Claude explanation: $e');
+    }
   }
-
-  void dispose() {
-    _controller?.dispose();
-    _isInitialized = false;
+  
+  @override
+  Future<void> dispose() async {
+    // Clean up any resources if needed
   }
-
-  bool get isInitialized => _isInitialized;
-  CameraController? get controller => _controller;
 }```\n
+\n### src/service/llm/providers/gemini_provider.dart\n
+```dart
+import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/llm/exceptions/llm_provider_exception.dart';
+import '../../../models/move.dart';
+import '../base_llm_provider.dart';
+
+class GeminiProvider extends BaseLLMProvider {
+  GenerativeModel? _model;
+  final String _modelName;
+
+  GeminiProvider({
+    required Map<String, dynamic> config,
+  }) : _modelName = config['model'] as String;
+
+  @override
+  Future<void> initialize() async {
+    if (_model != null) return;
+    try {
+      debugPrint('Initializing Gemini model with $_modelName');
+      _model = FirebaseVertexAI.instance.generativeModel(model: _modelName);
+
+      await _model?.generateContent([Content.text('test initialization')]);
+      debugPrint('Gemini model initialized successfully');
+    } catch (e) {
+      debugPrint('Error initializing Gemini model: $e');
+      _model = null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<String> generateMoveExplanation(
+      String playerName, Move move, int currentScore) async {
+    if (_model == null) {
+      await initialize();
+    }
+
+    if (_model == null) {
+      throw LLMProviderException('Gemini model not initialized');
+    }
+    try {
+      final prompt = createPrompt(playerName, move, currentScore);
+
+      final response = await _model!.generateContent([
+        Content.multi([TextPart(prompt)]),
+      ]);
+
+      if (response.text == null) {
+        throw LLMProviderException('Empty response from Gemini');
+      }
+
+      return _cleanMarkdownText(response.text!);
+    } catch (e) {
+      throw LLMProviderException('Failed to generate Gemini explanation: $e');
+    }
+  }
+
+  @override
+  Future<void> dispose() async {
+    _model = null;
+  }
+
+  String _cleanMarkdownText(String markdown) {
+    // Implementation remains the same as current AIService
+    var cleaned = markdown.replaceAll(RegExp(r'#{1,6}\s.*\n'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\*\*|__|\*|_'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'```[\s\S]*?```'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'`[^`]*`'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*+]\s+', multiLine: true), '');
+    cleaned = cleaned.replaceAll(RegExp(r'^\s*\d+\.\s+', multiLine: true), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\[([^\]]*)\]\([^\)]*\)'), r'$1');
+    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*_]{3,}\s*'), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ');
+    return cleaned.trim();
+  }
+}
+```\n
+\n### src/service/llm/llm_service.dart\n
+```dart
+import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/constants/llm_config.dart';
+import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/llm/exceptions/llm_provider_exception.dart';
+import './base_llm_provider.dart';
+import './llm_provider_factory.dart';
+
+class LLMService {
+  BaseLLMProvider? _currentProvider;
+  final SettingsProvider _settings;
+
+  LLMService(this._settings) {
+    _initializeProvider();
+  }
+
+  Future<void> _initializeProvider() async {
+    try {
+      final config = await _loadProviderConfig(_settings.llmProvider);
+      _currentProvider = LLMProviderFactory.createProvider(
+        _settings.llmProvider,
+        config,
+      );
+      await _currentProvider?.initialize();
+    } catch (e) {
+      debugPrint('Error initializing provider: $e');
+      throw LLMProviderException('Failed to initialize provider: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> _loadProviderConfig(LLMProvider provider) async {
+    // Load provider-specific configuration
+    switch (provider) {
+      case LLMProvider.gemini:
+        return {
+          'model': LLMConfig.geminiModelName,
+        };
+
+      case LLMProvider.claude:
+        // Load Claude API key from secure storage or environment
+        const apiKey = String.fromEnvironment(LLMConfig.claudeApiKeyEnv);
+        if (apiKey.isEmpty) {
+          throw LLMProviderException('Claude API key not found');
+        }
+        return {
+          'apiKey': apiKey,
+          'apiEndpoint': const String.fromEnvironment(
+            LLMConfig.claudeApiEndpointEnv,
+            defaultValue: LLMConfig.claudeDefaultEndpoint,
+          ),
+        };
+      case LLMProvider.deepseek:
+        return {
+          'apiKey': const String.fromEnvironment(LLMConfig.deepseekApiKeyEnv),
+        };
+
+      case LLMProvider.o3:
+        return {
+          'apiKey': const String.fromEnvironment(LLMConfig.o3ApiKeyEnv),
+        };
+    }
+  }
+
+  Future<String> generateMoveExplanation(
+    String playerName,
+    Move move,
+    int currentScore,
+  ) async {
+    if (_currentProvider == null) {
+      throw LLMProviderException('No LLM provider initialized');
+    }
+
+    try {
+      return await _currentProvider!.generateMoveExplanation(
+        playerName,
+        move,
+        currentScore,
+      );
+    } catch (e) {
+      throw LLMProviderException('Failed to generate explanation: $e');
+    }
+  }
+
+  Future<void> switchProvider(LLMProvider newProvider) async {
+    try {
+      // 1. Dispose of the current provider
+      await _currentProvider?.dispose();
+
+      // 2. Load configuration for the new provider
+      final config = await _loadProviderConfig(newProvider);
+
+      // 3. Create and initialize the new provider
+      _currentProvider = LLMProviderFactory.createProvider(newProvider, config);
+      await _currentProvider?.initialize();
+
+      debugPrint('Successfully switched to ${newProvider.toString()}');
+    } catch (e) {
+      debugPrint('Error switching provider: $e');
+      // Re-initialize the previous provider if switch fails
+      await _initializeProvider();
+      throw LLMProviderException('Failed to switch provider: $e');
+    }
+  }
+
+  Future<void> dispose() async {
+    await _currentProvider?.dispose();
+    _currentProvider = null;
+  }
+}
+```\n
+\n### src/service/llm/exceptions/llm_provider_exception.dart\n
+```dart
+class LLMProviderException implements Exception {
+  final String message;
+  
+  LLMProviderException(this.message);
+  
+  @override
+  String toString() => 'LLMProviderException: $message';
+}```\n
+\n### src/service/llm/base_llm_provider.dart\n
+```dart
+import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
+
+abstract class BaseLLMProvider {
+  Future<String> generateMoveExplanation(String playerName, Move move, int currentScore);
+  Future<void> initialize();
+  Future<void> dispose();
+  
+  // Helper method to create consistent prompt across providers
+  String createPrompt(String playerName, Move move, int currentScore) {
+    return '''
+    Explain this Scrabble move played by $playerName in a concise and engaging way:
+    - Word: ${move.word}
+    - Score for this move: ${move.score} points
+    - Tiles placed: ${move.tiles.map((t) => '${t.letter}(${t.points})').join(', ')}
+    - Current total score after this move: $currentScore points
+    
+    Please explain:
+    1. Like you were talking directly to the player
+    2. Why this is a good move
+    3. How the score was calculated
+    4. Any strategic implications
+    Keep it brief but informative in 2 sentences maximum.
+    ''';
+  }
+}```\n
+\n### src/service/llm/llm_provider_factory.dart\n
+```dart
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/llm/base_llm_provider.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/llm/providers/claude_provider.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/llm/providers/gemini_provider.dart';
+
+class LLMProviderFactory {
+  static BaseLLMProvider createProvider(
+      LLMProvider provider, Map<String, dynamic> config) {
+    switch (provider) {
+      case LLMProvider.gemini:
+        return GeminiProvider(config: config);
+      case LLMProvider.claude:
+        return ClaudeProvider(
+          apiKey: config['apiKey'] as String,
+          apiEndpoint: config['apiEndpoint'] as String?,
+        );
+      case LLMProvider.deepseek:
+        // TODO: Implement DeepSeek provider
+        throw UnimplementedError('DeepSeek provider not yet implemented');
+      case LLMProvider.o3:
+        // TODO: Implement O3 provider
+        throw UnimplementedError('O3 provider not yet implemented');
+    }
+  }
+}
+```\n
 \n### src/service/firebase_service.dart\n
 ```dart
 // lib/src/services/firebase_service.dart
@@ -1508,90 +1902,55 @@ class FirebaseService {
 \n### src/service/ai_service.dart\n
 ```dart
 import 'package:cloud_text_to_speech/cloud_text_to_speech.dart';
-import 'package:firebase_vertexai/firebase_vertexai.dart';
+import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
+import 'package:oloodi_scrabble_end_user_app/src/service/llm/llm_service.dart';
 
 class AIService {
-  late GenerativeModel _model;
+  final LLMService _llmService;
+  bool _isTtsInitialized = false;
 
-  AIService() {
-    _model = FirebaseVertexAI.instance
-        .generativeModel(model: 'gemini-2.0-flash-exp');
-    // Initialize TTS with Google provider
-    TtsGoogle.init(
-      apiKey: const String.fromEnvironment('GOOGLE_CLOUD_API_KEY'),
-      withLogs: true, // Set to false in production
-    );
+  AIService(SettingsProvider settings) : _llmService = LLMService(settings) {
+    _initializeTts();
   }
 
-  Future<String> generateMoveExplanation(
-      String playerName, Move move, int currentScore) async {
+  Future<void> _initializeTts() async {
     try {
-      final prompt = '''
-      Explain this Scrabble move played by $playerName in a concise and engaging way:
-      - Word: ${move.word}
-      - Score for this move: ${move.score} points
-      - Tiles placed: ${move.tiles.map((t) => '${t.letter}(${t.points})').join(', ')}
-      - Current total score after this move: $currentScore points
-      
-      Please explain:
-      1. Like you were talking directly to the player
-      2. Why this is a good move
-      3. How the score was calculated
-      4. Any strategic implications
-      Keep it brief but informative in 2 sentences maximum.
-      ''';
-
-      final response = await _model.generateContent([
-        Content.multi([
-          TextPart(prompt),
-        ]),
-      ]);
-
-      if (response.text == null) {
-        throw Exception('Empty response from Gemini');
-      }
-
-      // Clean markdown from the response for display
-      final cleanedText = _cleanMarkdownText(response.text!);
-      return cleanedText;
+      TtsGoogle.init(
+        apiKey: const String.fromEnvironment('GOOGLE_CLOUD_API_KEY'),
+        withLogs: true,
+      );
+      _isTtsInitialized = true;
+      debugPrint('TTS initialized successfully');
     } catch (e) {
-      throw Exception('Failed to generate move explanation: $e');
+      debugPrint('Failed to initialize TTS: $e');
+      _isTtsInitialized = false;
     }
   }
 
-  String _cleanMarkdownText(String markdown) {
-    // Remove headers
-    var cleaned = markdown.replaceAll(RegExp(r'#{1,6}\s.*\n'), '');
+  Future<String> generateMoveExplanation(
+    String playerName,
+    Move move,
+    int currentScore,
+  ) async {
+    return _llmService.generateMoveExplanation(playerName, move, currentScore);
+  }
 
-    // Remove bold and italic markers
-    cleaned = cleaned.replaceAll(RegExp(r'\*\*|__|\*|_'), '');
-
-    // Remove code blocks and inline code
-    cleaned = cleaned.replaceAll(RegExp(r'```[\s\S]*?```'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'`[^`]*`'), '');
-
-    // Remove bullet points and numbered lists
-    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*+]\s+', multiLine: true), '');
-    cleaned = cleaned.replaceAll(RegExp(r'^\s*\d+\.\s+', multiLine: true), '');
-
-    // Remove links
-    cleaned = cleaned.replaceAll(RegExp(r'\[([^\]]*)\]\([^\)]*\)'), r'$1');
-
-    // Remove horizontal rules
-    cleaned = cleaned.replaceAll(RegExp(r'^\s*[-*_]{3,}\s*'), '');
-
-    // Remove extra whitespace
-    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ');
-
-    return cleaned.trim();
+  Future<void> switchProvider(LLMProvider newProvider) async {
+    await _llmService.switchProvider(newProvider);
   }
 
   Future<List<int>> convertToSpeech(String text) async {
-    // Get voices
+    if (!_isTtsInitialized) {
+      await _initializeTts();
+      if (!_isTtsInitialized) {
+        throw Exception('Failed to initialize Text-to-Speech service');
+      }
+    }
+
     final voicesResponse = await TtsGoogle.getVoices();
 
-    //Pick an English Voice
     final voice = voicesResponse.voices
         .where((element) => element.name.startsWith('Mason'))
         .toList(growable: false)
@@ -1604,9 +1963,11 @@ class AIService {
     );
 
     final ttsResponse = await TtsGoogle.convertTts(params);
-
-    //Get the audio bytes.
     return ttsResponse.audio.buffer.asUint8List().toList();
+  }
+
+  Future<void> dispose() async {
+    await _llmService.dispose();
   }
 }
 ```\n
