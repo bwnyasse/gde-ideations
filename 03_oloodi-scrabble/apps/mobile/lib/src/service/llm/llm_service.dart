@@ -75,6 +75,7 @@ class LLMService {
         playerName,
         move,
         currentScore,
+        _settings.language,
       );
     } catch (e) {
       throw LLMProviderException('Failed to generate explanation: $e');

@@ -5,6 +5,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move_explanation.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/service/ai_service.dart';
 import '../models/game_session.dart';
 import '../models/board_square.dart';
@@ -16,6 +17,7 @@ import '../service/firebase_service.dart';
 class GameStateProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   late AIService _aiService;
+  final SettingsProvider _settings;
   Map<String, MoveExplanation> _moveExplanations = {};
 
   // Game state
@@ -26,7 +28,7 @@ class GameStateProvider with ChangeNotifier {
   bool _isGameOver = false;
   String? _gameId;
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  late AudioPlayer _audioPlayer;
   bool _isPlaying = false;
 
   // Add getters
@@ -37,9 +39,18 @@ class GameStateProvider with ChangeNotifier {
   StreamSubscription? _movesSubscription;
 
   // Constructor
-  GameStateProvider(AIService aiService) {
-    _aiService = aiService;
+  GameStateProvider(AIService aiService, SettingsProvider settings)
+      : _aiService = aiService,
+        _settings = settings {
     _initializeBoard();
+    _initializeAudioPlayer();
+  }
+
+  void _initializeAudioPlayer() {
+    _audioPlayer = AudioPlayer();
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      debugPrint('Audio player state changed: $state');
+    });
   }
 
   String getPlayerNameById(Color color, String playerId) {
@@ -74,7 +85,8 @@ class GameStateProvider with ChangeNotifier {
       );
 
       // Convert to speech in parallel
-      final audioData = await _aiService.convertToSpeech(explanation);
+      final audioData =
+          await _aiService.convertToSpeech(explanation, _settings.language);
 
       final moveExplanation = MoveExplanation(
         text: explanation,
@@ -342,23 +354,31 @@ class GameStateProvider with ChangeNotifier {
 
   Future<void> handleMoveExplanation(Color color, Move move) async {
     if (_isPlaying) {
-      await _audioPlayer.stop();
       _isPlaying = false;
+      await _audioPlayer.stop();
       notifyListeners();
       return;
     }
 
     try {
+      // Get the explanation first
       final explanation = await _aiService.generateMoveExplanation(
         getPlayerNameById(color, move.playerId),
         move,
         getPlayerScore(move.playerId),
       );
 
-      final audioData = await _aiService.convertToSpeech(explanation);
+      // Convert to speech
+      final audioData =
+          await _aiService.convertToSpeech(explanation, _settings.language);
 
-      await _audioPlayer.play(BytesSource(Uint8List.fromList(audioData)));
-      _isPlaying = true;
+      // Ensure audioData is not null and not empty
+      if (audioData.isEmpty) {
+        throw Exception('No audio data received');
+      }
+
+      // Create the audio source
+      final source = BytesSource(Uint8List.fromList(audioData));
 
       // Set up completion listener
       _audioPlayer.onPlayerComplete.listen((_) {
@@ -366,8 +386,12 @@ class GameStateProvider with ChangeNotifier {
         notifyListeners();
       });
 
+      // Play the audio
+      await _audioPlayer.play(source);
+      _isPlaying = true;
       notifyListeners();
     } catch (e) {
+      debugPrint('Audio playback error: $e');
       _isPlaying = false;
       notifyListeners();
       throw Exception('Failed to play move explanation: $e');

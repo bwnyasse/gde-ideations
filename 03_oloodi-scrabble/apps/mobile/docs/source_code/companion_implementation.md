@@ -86,7 +86,7 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-    
+
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
 
@@ -103,12 +103,15 @@ void main() async {
           update: (context, settings, previous) =>
               previous ?? AIServiceProvider(settings),
         ),
-        ChangeNotifierProxyProvider<AIServiceProvider, GameStateProvider>(
+        ChangeNotifierProxyProvider2<SettingsProvider, AIServiceProvider,
+            GameStateProvider>(
           create: (context) => GameStateProvider(
             context.read<AIServiceProvider>().service,
+            context.read<SettingsProvider>(),
           ),
-          update: (context, aiServiceProvider, previous) =>
-              previous ?? GameStateProvider(aiServiceProvider.service),
+          update: (context, settings, aiServiceProvider, previous) =>
+              previous ??
+              GameStateProvider(aiServiceProvider.service, settings),
         ),
       ],
       child: const ScrabbleAIApp(),
@@ -128,7 +131,8 @@ class ScrabbleAIApp extends StatelessWidget {
     final aiService = context.read<AIServiceProvider>().service;
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => GameStateProvider(aiService)),
+        ChangeNotifierProvider(
+            create: (_) => GameStateProvider(aiService, settings)),
       ],
       child: MaterialApp(
         title: 'Oloodi Scrabble Companion',
@@ -165,6 +169,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:oloodi_scrabble_end_user_app/src/models/move_explanation.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/service/ai_service.dart';
 import '../models/game_session.dart';
 import '../models/board_square.dart';
@@ -176,6 +181,7 @@ import '../service/firebase_service.dart';
 class GameStateProvider with ChangeNotifier {
   final FirebaseService _firebaseService = FirebaseService();
   late AIService _aiService;
+  final SettingsProvider _settings;
   Map<String, MoveExplanation> _moveExplanations = {};
 
   // Game state
@@ -197,8 +203,9 @@ class GameStateProvider with ChangeNotifier {
   StreamSubscription? _movesSubscription;
 
   // Constructor
-  GameStateProvider(AIService aiService) {
-    _aiService = aiService;
+  GameStateProvider(AIService aiService, SettingsProvider settings)
+      : _aiService = aiService,
+        _settings = settings {
     _initializeBoard();
   }
 
@@ -234,7 +241,8 @@ class GameStateProvider with ChangeNotifier {
       );
 
       // Convert to speech in parallel
-      final audioData = await _aiService.convertToSpeech(explanation);
+      final audioData =
+          await _aiService.convertToSpeech(explanation, _settings.language);
 
       final moveExplanation = MoveExplanation(
         text: explanation,
@@ -515,7 +523,8 @@ class GameStateProvider with ChangeNotifier {
         getPlayerScore(move.playerId),
       );
 
-      final audioData = await _aiService.convertToSpeech(explanation);
+      final audioData =
+          await _aiService.convertToSpeech(explanation, _settings.language);
 
       await _audioPlayer.play(BytesSource(Uint8List.fromList(audioData)));
       _isPlaying = true;
@@ -591,6 +600,8 @@ class AIServiceProvider extends ChangeNotifier {
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum AppLanguage { english, french }
+
 enum LLMProvider { gemini, claude, deepseek, o3 }
 
 enum VoiceSynthesisProvider { cloudTts, elevenLabs }
@@ -603,6 +614,7 @@ class SettingsProvider with ChangeNotifier {
   VoidCallback? _onProviderChanged;
 
   // Default values
+  AppLanguage _language = AppLanguage.english;
   LLMProvider _llmProvider = LLMProvider.gemini;
   VoiceSynthesisProvider _voiceProvider = VoiceSynthesisProvider.cloudTts;
   AppThemeMode _themeMode = AppThemeMode.dark;
@@ -613,12 +625,14 @@ class SettingsProvider with ChangeNotifier {
   static const String _voiceProviderKey = 'voice_provider';
   static const String _themeModeKey = 'theme_mode';
   static const String _selectedVoiceKey = 'selected_voice';
+  static const String _languageKey = 'app_language';
 
   SettingsProvider(this._prefs) {
     _loadSettings();
   }
 
   // Getters
+  AppLanguage get language => _language;
   LLMProvider get llmProvider => _llmProvider;
   VoiceSynthesisProvider get voiceProvider => _voiceProvider;
   AppThemeMode get themeMode => _themeMode;
@@ -631,6 +645,11 @@ class SettingsProvider with ChangeNotifier {
 
   // Load settings from SharedPreferences
   void _loadSettings() {
+    final languageIndex = _prefs.getInt(_languageKey);
+    if (languageIndex != null) {
+      _language = AppLanguage.values[languageIndex];
+    }
+
     final llmIndex = _prefs.getInt(_llmProviderKey);
     if (llmIndex != null) {
       _llmProvider = LLMProvider.values[llmIndex];
@@ -649,10 +668,15 @@ class SettingsProvider with ChangeNotifier {
     _selectedVoice = _prefs.getString(_selectedVoiceKey) ?? _selectedVoice;
   }
 
+  Future<void> setLanguage(AppLanguage language) async {
+    _language = language;
+    await _prefs.setInt(_languageKey, language.index);
+    notifyListeners();
+  }
+
   // Setters with persistence
   Future<void> setLLMProvider(LLMProvider provider) async {
     try {
-
       // Update local state and preferences
       _llmProvider = provider;
       await _prefs.setInt(_llmProviderKey, provider.index);
@@ -1418,6 +1442,7 @@ class _HomeScreenState extends State<HomeScreen> {
 ```dart
 import 'package:http/http.dart' as http;
 import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/service/llm/exceptions/llm_provider_exception.dart';
 import 'dart:convert';
 import '../base_llm_provider.dart';
@@ -1425,13 +1450,13 @@ import '../base_llm_provider.dart';
 class ClaudeProvider extends BaseLLMProvider {
   final String _apiKey;
   final String _apiEndpoint;
-  
+
   ClaudeProvider({
     required String apiKey,
     String? apiEndpoint,
-  }) : _apiKey = apiKey,
-       _apiEndpoint = apiEndpoint ?? 'https://api.anthropic.com/v1/messages';
-  
+  })  : _apiKey = apiKey,
+        _apiEndpoint = apiEndpoint ?? 'https://api.anthropic.com/v1/messages';
+
   @override
   Future<void> initialize() async {
     // Validate API key and connection
@@ -1440,7 +1465,7 @@ class ClaudeProvider extends BaseLLMProvider {
         Uri.parse(_apiEndpoint),
         headers: {'X-API-Key': _apiKey},
       );
-      
+
       if (response.statusCode != 200) {
         throw LLMProviderException('Failed to initialize Claude provider');
       }
@@ -1448,16 +1473,22 @@ class ClaudeProvider extends BaseLLMProvider {
       throw LLMProviderException('Claude initialization error: $e');
     }
   }
-  
+
   @override
   Future<String> generateMoveExplanation(
-    String playerName, 
-    Move move, 
-    int currentScore
+    String playerName,
+    Move move,
+    int currentScore,
+    AppLanguage language,
   ) async {
     try {
-      final prompt = createPrompt(playerName, move, currentScore);
-      
+      final prompt = createPrompt(
+        playerName,
+        move,
+        currentScore,
+        language,
+      );
+
       final response = await http.post(
         Uri.parse(_apiEndpoint),
         headers: {
@@ -1466,31 +1497,35 @@ class ClaudeProvider extends BaseLLMProvider {
         },
         body: json.encode({
           'model': 'claude-3-sonnet-20240229',
-          'messages': [{'role': 'user', 'content': prompt}],
+          'messages': [
+            {'role': 'user', 'content': prompt}
+          ],
           'max_tokens': 150,
         }),
       );
-      
+
       if (response.statusCode != 200) {
         throw LLMProviderException('Claude API error: ${response.body}');
       }
-      
+
       final data = json.decode(response.body);
       return data['content'] as String;
     } catch (e) {
       throw LLMProviderException('Failed to generate Claude explanation: $e');
     }
   }
-  
+
   @override
   Future<void> dispose() async {
     // Clean up any resources if needed
   }
-}```\n
+}
+```\n
 \n### src/service/llm/providers/gemini_provider.dart\n
 ```dart
 import 'package:firebase_vertexai/firebase_vertexai.dart';
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/service/llm/exceptions/llm_provider_exception.dart';
 import '../../../models/move.dart';
 import '../base_llm_provider.dart';
@@ -1521,7 +1556,11 @@ class GeminiProvider extends BaseLLMProvider {
 
   @override
   Future<String> generateMoveExplanation(
-      String playerName, Move move, int currentScore) async {
+    String playerName,
+    Move move,
+    int currentScore,
+    AppLanguage language,
+  ) async {
     if (_model == null) {
       await initialize();
     }
@@ -1530,7 +1569,12 @@ class GeminiProvider extends BaseLLMProvider {
       throw LLMProviderException('Gemini model not initialized');
     }
     try {
-      final prompt = createPrompt(playerName, move, currentScore);
+      final prompt = createPrompt(
+        playerName,
+        move,
+        currentScore,
+        language,
+      );
 
       final response = await _model!.generateContent([
         Content.multi([TextPart(prompt)]),
@@ -1645,6 +1689,7 @@ class LLMService {
         playerName,
         move,
         currentScore,
+        _settings.language,
       );
     } catch (e) {
       throw LLMProviderException('Failed to generate explanation: $e');
@@ -1691,30 +1736,36 @@ class LLMProviderException implements Exception {
 \n### src/service/llm/base_llm_provider.dart\n
 ```dart
 import 'package:oloodi_scrabble_end_user_app/src/models/move.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 
 abstract class BaseLLMProvider {
-  Future<String> generateMoveExplanation(String playerName, Move move, int currentScore);
+  Future<String> generateMoveExplanation(
+      String playerName, Move move, int currentScore, AppLanguage language);
   Future<void> initialize();
   Future<void> dispose();
-  
-  // Helper method to create consistent prompt across providers
-  String createPrompt(String playerName, Move move, int currentScore) {
+
+  String createPrompt(
+      String playerName, Move move, int currentScore, AppLanguage language) {
+    final isEnglish = language == AppLanguage.english;
+
     return '''
-    Explain this Scrabble move played by $playerName in a concise and engaging way:
-    - Word: ${move.word}
-    - Score for this move: ${move.score} points
-    - Tiles placed: ${move.tiles.map((t) => '${t.letter}(${t.points})').join(', ')}
-    - Current total score after this move: $currentScore points
+    ${isEnglish ? 'Explain' : 'Explique'} ${isEnglish ? 'this Scrabble move played by' : 'ce coup de Scrabble joué par'} $playerName ${isEnglish ? 'in a concise and engaging way' : 'de manière concise et engageante'}:
+    - ${isEnglish ? 'Word' : 'Mot'}: ${move.word}
+    - ${isEnglish ? 'Score for this move' : 'Score pour ce coup'}: ${move.score} ${isEnglish ? 'points' : 'points'}
+    - ${isEnglish ? 'Tiles placed' : 'Lettres placées'}: ${move.tiles.map((t) => '${t.letter}(${t.points})').join(', ')}
+    - ${isEnglish ? 'Current total score after this move' : 'Score total actuel après ce coup'}: $currentScore ${isEnglish ? 'points' : 'points'}
     
-    Please explain:
-    1. Like you were talking directly to the player
-    2. Why this is a good move
-    3. How the score was calculated
-    4. Any strategic implications
-    Keep it brief but informative in 2 sentences maximum.
+    ${isEnglish ? 'Please explain' : 'Veuillez expliquer'}:
+    1. ${isEnglish ? 'Like you were talking directly to the player' : 'Comme si vous parliez directement au joueur'}
+    2. ${isEnglish ? 'Why this is a good move' : 'Pourquoi c\'est un bon coup'}
+    3. ${isEnglish ? 'How the score was calculated' : 'Comment le score a été calculé'}
+    4. ${isEnglish ? 'Any strategic implications' : 'Les implications stratégiques'}
+    ${isEnglish ? 'Keep it brief but informative in 2 sentences maximum.' : 'Gardez cela bref mais informatif en 2 phrases maximum.'}
+    ${isEnglish ? 'Please respond in English.' : 'Veuillez répondre en français.'}
     ''';
   }
-}```\n
+}
+```\n
 \n### src/service/llm/llm_provider_factory.dart\n
 ```dart
 import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
@@ -1941,7 +1992,7 @@ class AIService {
     await _llmService.switchProvider(newProvider);
   }
 
-  Future<List<int>> convertToSpeech(String text) async {
+  Future<List<int>> convertToSpeech(String text, AppLanguage language) async {
     if (!_isTtsInitialized) {
       await _initializeTts();
       if (!_isTtsInitialized) {
@@ -1951,8 +2002,14 @@ class AIService {
 
     final voicesResponse = await TtsGoogle.getVoices();
 
+    // Define the voice parameters based on language
+    final targetVoice = language == AppLanguage.english
+        ? 'en-US-Wavenet-I' // English male voice
+        : 'fr-FR-Wavenet-D'; // French male voice
+
+    // Find the matching voice
     final voice = voicesResponse.voices
-        .where((element) => element.name.startsWith('Mason'))
+        .where((element) => element.name == targetVoice)
         .toList(growable: false)
         .first;
 
@@ -3476,7 +3533,7 @@ class SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Card(
       margin: EdgeInsets.zero,
       shape: const RoundedRectangleBorder(
@@ -3486,7 +3543,8 @@ class SettingsPanel extends StatelessWidget {
         width: 400,
         decoration: BoxDecoration(
           color: theme.cardColor,
-          borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+          borderRadius:
+              const BorderRadius.horizontal(left: Radius.circular(12)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3502,6 +3560,8 @@ class SettingsPanel extends StatelessWidget {
                     const SizedBox(height: 32),
                     _buildVoiceSynthesisSection(context),
                     const SizedBox(height: 32),
+                    _buildLanguageSection(context),
+                    const SizedBox(height: 32),
                     _buildThemeSection(context),
                   ],
                 ),
@@ -3515,7 +3575,7 @@ class SettingsPanel extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -3549,7 +3609,7 @@ class SettingsPanel extends StatelessWidget {
   Widget _buildLanguageModelSection(BuildContext context) {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3569,16 +3629,17 @@ class SettingsPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              ...LLMProvider.values.map((provider) => RadioListTile<LLMProvider>(
-                value: provider,
-                groupValue: settings.llmProvider,
-                onChanged: (value) => settings.setLLMProvider(value!),
-                title: Text(
-                  settings.getLLMProviderName(provider),
-                  style: TextStyle(color: theme.colorScheme.onSurface),
-                ),
-                activeColor: theme.colorScheme.tertiary,
-              )),
+              ...LLMProvider.values
+                  .map((provider) => RadioListTile<LLMProvider>(
+                        value: provider,
+                        groupValue: settings.llmProvider,
+                        onChanged: (value) => settings.setLLMProvider(value!),
+                        title: Text(
+                          settings.getLLMProviderName(provider),
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
+                        activeColor: theme.colorScheme.tertiary,
+                      )),
             ],
           ),
         ),
@@ -3589,7 +3650,7 @@ class SettingsPanel extends StatelessWidget {
   Widget _buildVoiceSynthesisSection(BuildContext context) {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3609,16 +3670,17 @@ class SettingsPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              ...VoiceSynthesisProvider.values.map((provider) => RadioListTile<VoiceSynthesisProvider>(
-                value: provider,
-                groupValue: settings.voiceProvider,
-                onChanged: (value) => settings.setVoiceProvider(value!),
-                title: Text(
-                  settings.getVoiceProviderName(provider),
-                  style: TextStyle(color: theme.colorScheme.onSurface),
-                ),
-                activeColor: theme.colorScheme.tertiary,
-              )),
+              ...VoiceSynthesisProvider.values
+                  .map((provider) => RadioListTile<VoiceSynthesisProvider>(
+                        value: provider,
+                        groupValue: settings.voiceProvider,
+                        onChanged: (value) => settings.setVoiceProvider(value!),
+                        title: Text(
+                          settings.getVoiceProviderName(provider),
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
+                        activeColor: theme.colorScheme.tertiary,
+                      )),
               Divider(color: theme.dividerColor),
               const SizedBox(height: 8),
               Text(
@@ -3675,10 +3737,51 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
+// In your settings panel
+  Widget _buildLanguageSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = context.watch<SettingsProvider>();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, 'Language'),
+        const SizedBox(height: 16),
+        _buildSettingCard(
+          context,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Response Language',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...AppLanguage.values.map((lang) => RadioListTile<AppLanguage>(
+                    value: lang,
+                    groupValue: settings.language,
+                    onChanged: (value) => settings.setLanguage(value!),
+                    title: Text(
+                      lang == AppLanguage.english ? 'English' : 'Français',
+                      style: TextStyle(color: theme.colorScheme.onSurface),
+                    ),
+                    activeColor: theme.colorScheme.tertiary,
+                  )),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildThemeSection(BuildContext context) {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3705,7 +3808,7 @@ class SettingsPanel extends StatelessWidget {
                   final isSelected = settings.themeMode == mode;
                   final themeData = AppTheme.getThemeData(mode);
                   final color = themeData.primaryColor;
-                  
+
                   return InkWell(
                     onTap: () => settings.setThemeMode(mode),
                     borderRadius: BorderRadius.circular(8),
@@ -3716,7 +3819,9 @@ class SettingsPanel extends StatelessWidget {
                         color: color.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: isSelected ? theme.colorScheme.tertiary : color.withOpacity(0.3),
+                          color: isSelected
+                              ? theme.colorScheme.tertiary
+                              : color.withOpacity(0.3),
                           width: isSelected ? 2 : 1,
                         ),
                       ),
@@ -3731,24 +3836,24 @@ class SettingsPanel extends StatelessWidget {
                               shape: BoxShape.circle,
                             ),
                             child: isSelected
-                              ? Icon(
-                                  Icons.check,
-                                  color: theme.colorScheme.tertiary,
-                                  size: 20,
-                                )
-                              : null,
+                                ? Icon(
+                                    Icons.check,
+                                    color: theme.colorScheme.tertiary,
+                                    size: 20,
+                                  )
+                                : null,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             _getThemeName(mode),
                             style: TextStyle(
-                              color: isSelected 
-                                ? theme.colorScheme.tertiary 
-                                : theme.colorScheme.onSurface,
+                              color: isSelected
+                                  ? theme.colorScheme.tertiary
+                                  : theme.colorScheme.onSurface,
                               fontSize: 12,
-                              fontWeight: isSelected 
-                                ? FontWeight.bold 
-                                : FontWeight.normal,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ],
@@ -3766,7 +3871,7 @@ class SettingsPanel extends StatelessWidget {
 
   Widget _buildSettingCard(BuildContext context, {required Widget child}) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -3782,7 +3887,7 @@ class SettingsPanel extends StatelessWidget {
 
   Widget _buildSectionTitle(BuildContext context, String title) {
     final theme = Theme.of(context);
-    
+
     return Text(
       title.toUpperCase(),
       style: TextStyle(
@@ -3804,7 +3909,8 @@ class SettingsPanel extends StatelessWidget {
         return 'Nature';
     }
   }
-}```\n
+}
+```\n
 \n## pubspec.yaml\n
 ```yaml
 name: oloodi_scrabble_end_user_app

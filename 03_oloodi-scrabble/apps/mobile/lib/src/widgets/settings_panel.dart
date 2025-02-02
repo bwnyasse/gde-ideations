@@ -16,7 +16,7 @@ class SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Card(
       margin: EdgeInsets.zero,
       shape: const RoundedRectangleBorder(
@@ -26,7 +26,8 @@ class SettingsPanel extends StatelessWidget {
         width: 400,
         decoration: BoxDecoration(
           color: theme.cardColor,
-          borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+          borderRadius:
+              const BorderRadius.horizontal(left: Radius.circular(12)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -42,6 +43,8 @@ class SettingsPanel extends StatelessWidget {
                     const SizedBox(height: 32),
                     _buildVoiceSynthesisSection(context),
                     const SizedBox(height: 32),
+                    _buildLanguageSection(context),
+                    const SizedBox(height: 32),
                     _buildThemeSection(context),
                   ],
                 ),
@@ -55,7 +58,7 @@ class SettingsPanel extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -89,7 +92,7 @@ class SettingsPanel extends StatelessWidget {
   Widget _buildLanguageModelSection(BuildContext context) {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -109,16 +112,17 @@ class SettingsPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              ...LLMProvider.values.map((provider) => RadioListTile<LLMProvider>(
-                value: provider,
-                groupValue: settings.llmProvider,
-                onChanged: (value) => settings.setLLMProvider(value!),
-                title: Text(
-                  settings.getLLMProviderName(provider),
-                  style: TextStyle(color: theme.colorScheme.onSurface),
-                ),
-                activeColor: theme.colorScheme.tertiary,
-              )),
+              ...LLMProvider.values
+                  .map((provider) => RadioListTile<LLMProvider>(
+                        value: provider,
+                        groupValue: settings.llmProvider,
+                        onChanged: (value) => settings.setLLMProvider(value!),
+                        title: Text(
+                          settings.getLLMProviderName(provider),
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
+                        activeColor: theme.colorScheme.tertiary,
+                      )),
             ],
           ),
         ),
@@ -129,7 +133,7 @@ class SettingsPanel extends StatelessWidget {
   Widget _buildVoiceSynthesisSection(BuildContext context) {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -149,16 +153,17 @@ class SettingsPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              ...VoiceSynthesisProvider.values.map((provider) => RadioListTile<VoiceSynthesisProvider>(
-                value: provider,
-                groupValue: settings.voiceProvider,
-                onChanged: (value) => settings.setVoiceProvider(value!),
-                title: Text(
-                  settings.getVoiceProviderName(provider),
-                  style: TextStyle(color: theme.colorScheme.onSurface),
-                ),
-                activeColor: theme.colorScheme.tertiary,
-              )),
+              ...VoiceSynthesisProvider.values
+                  .map((provider) => RadioListTile<VoiceSynthesisProvider>(
+                        value: provider,
+                        groupValue: settings.voiceProvider,
+                        onChanged: (value) => settings.setVoiceProvider(value!),
+                        title: Text(
+                          settings.getVoiceProviderName(provider),
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
+                        activeColor: theme.colorScheme.tertiary,
+                      )),
               Divider(color: theme.dividerColor),
               const SizedBox(height: 8),
               Text(
@@ -215,10 +220,51 @@ class SettingsPanel extends StatelessWidget {
     );
   }
 
+// In your settings panel
+  Widget _buildLanguageSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = context.watch<SettingsProvider>();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, 'Language'),
+        const SizedBox(height: 16),
+        _buildSettingCard(
+          context,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Response Language',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...AppLanguage.values.map((lang) => RadioListTile<AppLanguage>(
+                    value: lang,
+                    groupValue: settings.language,
+                    onChanged: (value) => settings.setLanguage(value!),
+                    title: Text(
+                      lang == AppLanguage.english ? 'English' : 'Français',
+                      style: TextStyle(color: theme.colorScheme.onSurface),
+                    ),
+                    activeColor: theme.colorScheme.tertiary,
+                  )),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildThemeSection(BuildContext context) {
     final theme = Theme.of(context);
     final settings = context.watch<SettingsProvider>();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -245,7 +291,7 @@ class SettingsPanel extends StatelessWidget {
                   final isSelected = settings.themeMode == mode;
                   final themeData = AppTheme.getThemeData(mode);
                   final color = themeData.primaryColor;
-                  
+
                   return InkWell(
                     onTap: () => settings.setThemeMode(mode),
                     borderRadius: BorderRadius.circular(8),
@@ -256,7 +302,9 @@ class SettingsPanel extends StatelessWidget {
                         color: color.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: isSelected ? theme.colorScheme.tertiary : color.withOpacity(0.3),
+                          color: isSelected
+                              ? theme.colorScheme.tertiary
+                              : color.withOpacity(0.3),
                           width: isSelected ? 2 : 1,
                         ),
                       ),
@@ -271,24 +319,24 @@ class SettingsPanel extends StatelessWidget {
                               shape: BoxShape.circle,
                             ),
                             child: isSelected
-                              ? Icon(
-                                  Icons.check,
-                                  color: theme.colorScheme.tertiary,
-                                  size: 20,
-                                )
-                              : null,
+                                ? Icon(
+                                    Icons.check,
+                                    color: theme.colorScheme.tertiary,
+                                    size: 20,
+                                  )
+                                : null,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             _getThemeName(mode),
                             style: TextStyle(
-                              color: isSelected 
-                                ? theme.colorScheme.tertiary 
-                                : theme.colorScheme.onSurface,
+                              color: isSelected
+                                  ? theme.colorScheme.tertiary
+                                  : theme.colorScheme.onSurface,
                               fontSize: 12,
-                              fontWeight: isSelected 
-                                ? FontWeight.bold 
-                                : FontWeight.normal,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ],
@@ -306,7 +354,7 @@ class SettingsPanel extends StatelessWidget {
 
   Widget _buildSettingCard(BuildContext context, {required Widget child}) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -322,7 +370,7 @@ class SettingsPanel extends StatelessWidget {
 
   Widget _buildSectionTitle(BuildContext context, String title) {
     final theme = Theme.of(context);
-    
+
     return Text(
       title.toUpperCase(),
       style: TextStyle(

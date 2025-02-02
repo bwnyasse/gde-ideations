@@ -1,5 +1,6 @@
 import 'package:firebase_vertexai/firebase_vertexai.dart';
 import 'package:flutter/material.dart';
+import 'package:oloodi_scrabble_end_user_app/src/providers/settings_provider.dart';
 import 'package:oloodi_scrabble_end_user_app/src/service/llm/exceptions/llm_provider_exception.dart';
 import '../../../models/move.dart';
 import '../base_llm_provider.dart';
@@ -30,7 +31,11 @@ class GeminiProvider extends BaseLLMProvider {
 
   @override
   Future<String> generateMoveExplanation(
-      String playerName, Move move, int currentScore) async {
+    String playerName,
+    Move move,
+    int currentScore,
+    AppLanguage language,
+  ) async {
     if (_model == null) {
       await initialize();
     }
@@ -39,7 +44,12 @@ class GeminiProvider extends BaseLLMProvider {
       throw LLMProviderException('Gemini model not initialized');
     }
     try {
-      final prompt = createPrompt(playerName, move, currentScore);
+      final prompt = createPrompt(
+        playerName,
+        move,
+        currentScore,
+        language,
+      );
 
       final response = await _model!.generateContent([
         Content.multi([TextPart(prompt)]),

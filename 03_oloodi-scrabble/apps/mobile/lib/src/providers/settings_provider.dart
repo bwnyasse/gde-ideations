@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum AppLanguage { english, french }
+
 enum LLMProvider { gemini, claude, deepseek, o3 }
 
 enum VoiceSynthesisProvider { cloudTts, elevenLabs }
@@ -14,6 +16,7 @@ class SettingsProvider with ChangeNotifier {
   VoidCallback? _onProviderChanged;
 
   // Default values
+  AppLanguage _language = AppLanguage.english;
   LLMProvider _llmProvider = LLMProvider.gemini;
   VoiceSynthesisProvider _voiceProvider = VoiceSynthesisProvider.cloudTts;
   AppThemeMode _themeMode = AppThemeMode.dark;
@@ -24,12 +27,14 @@ class SettingsProvider with ChangeNotifier {
   static const String _voiceProviderKey = 'voice_provider';
   static const String _themeModeKey = 'theme_mode';
   static const String _selectedVoiceKey = 'selected_voice';
+  static const String _languageKey = 'app_language';
 
   SettingsProvider(this._prefs) {
     _loadSettings();
   }
 
   // Getters
+  AppLanguage get language => _language;
   LLMProvider get llmProvider => _llmProvider;
   VoiceSynthesisProvider get voiceProvider => _voiceProvider;
   AppThemeMode get themeMode => _themeMode;
@@ -42,6 +47,11 @@ class SettingsProvider with ChangeNotifier {
 
   // Load settings from SharedPreferences
   void _loadSettings() {
+    final languageIndex = _prefs.getInt(_languageKey);
+    if (languageIndex != null) {
+      _language = AppLanguage.values[languageIndex];
+    }
+
     final llmIndex = _prefs.getInt(_llmProviderKey);
     if (llmIndex != null) {
       _llmProvider = LLMProvider.values[llmIndex];
@@ -60,10 +70,15 @@ class SettingsProvider with ChangeNotifier {
     _selectedVoice = _prefs.getString(_selectedVoiceKey) ?? _selectedVoice;
   }
 
+  Future<void> setLanguage(AppLanguage language) async {
+    _language = language;
+    await _prefs.setInt(_languageKey, language.index);
+    notifyListeners();
+  }
+
   // Setters with persistence
   Future<void> setLLMProvider(LLMProvider provider) async {
     try {
-
       // Update local state and preferences
       _llmProvider = provider;
       await _prefs.setInt(_llmProviderKey, provider.index);

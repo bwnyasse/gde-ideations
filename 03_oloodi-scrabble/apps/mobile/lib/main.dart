@@ -15,7 +15,7 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-    
+
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
 
@@ -32,12 +32,15 @@ void main() async {
           update: (context, settings, previous) =>
               previous ?? AIServiceProvider(settings),
         ),
-        ChangeNotifierProxyProvider<AIServiceProvider, GameStateProvider>(
+        ChangeNotifierProxyProvider2<SettingsProvider, AIServiceProvider,
+            GameStateProvider>(
           create: (context) => GameStateProvider(
             context.read<AIServiceProvider>().service,
+            context.read<SettingsProvider>(),
           ),
-          update: (context, aiServiceProvider, previous) =>
-              previous ?? GameStateProvider(aiServiceProvider.service),
+          update: (context, settings, aiServiceProvider, previous) =>
+              previous ??
+              GameStateProvider(aiServiceProvider.service, settings),
         ),
       ],
       child: const ScrabbleAIApp(),
@@ -57,7 +60,8 @@ class ScrabbleAIApp extends StatelessWidget {
     final aiService = context.read<AIServiceProvider>().service;
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => GameStateProvider(aiService)),
+        ChangeNotifierProvider(
+            create: (_) => GameStateProvider(aiService, settings)),
       ],
       child: MaterialApp(
         title: 'Oloodi Scrabble Companion',
