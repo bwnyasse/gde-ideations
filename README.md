@@ -8,6 +8,10 @@ This repository showcases a collection of projects, ranging from simple proof-of
 
 - **Comet**: An AI-powered folder explorer that enhances the developer experience by providing intelligent insights into code organization and quality. [Explore Comet](/01_comet)
 
+- **Oloodi Scrabble**: An AI-powered Scrabble companion project that enhances the traditional Scrabble experience through modern technology. The project consists of two complementary applications:
+  - **Moderator App**: A smart assistant for the game moderator, using AI-powered image recognition to capture moves, validate plays, and keep score.
+  - **Companion App**: A digital window into the game state, allowing players to check scores, review moves, and get AI-powered insights about gameplay.
+
 ## Contributing
 
 I warmly welcome collaboration and contributions to the projects in this repository. Whether you have an idea for a new project, suggestions for improving existing ones, or want to contribute code, please feel free to reach out or submit a pull request.
