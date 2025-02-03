@@ -53,12 +53,12 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyA1mSVhEByfd3i4-MVHI5O48s8QsqORXj8',
-    appId: '1:553140087820:web:c6db42b98856c306d51229',
-    messagingSenderId: '553140087820',
-    projectId: 'learning-box-369917',
-    authDomain: 'learning-box-369917.firebaseapp.com',
-    storageBucket: 'learning-box-369917.firebasestorage.app',
-    measurementId: 'G-KX4ZKD5MPR',
+    apiKey: const String.fromEnvironment('FIREBASE_API_KEY'),
+    appId: const String.fromEnvironment('FIREBASE_APP_ID'),
+    messagingSenderId: const String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID'),
+    projectId: const String.fromEnvironment('FIREBASE_PROJECT_ID'),
+    authDomain: const String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
+    storageBucket: const String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
+    measurementId: const String.fromEnvironment('FIREBASE_MEASUREMENT_ID'),
   );
 }

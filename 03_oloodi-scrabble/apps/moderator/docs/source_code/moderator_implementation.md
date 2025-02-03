@@ -57,11 +57,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCHk-o2MoCxroAM5rjhVsGI77RZi2drqfM',
-    appId: '1:553140087820:android:a8c79c54f1da5c6ed51229',
-    messagingSenderId: '553140087820',
-    projectId: 'learning-box-369917',
-    storageBucket: 'learning-box-369917.firebasestorage.app',
+    apiKey: const String.fromEnvironment('FIREBASE_API_KEY'),
+    appId: const String.fromEnvironment('FIREBASE_APP_ID'),
+    messagingSenderId: const String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID'),
+    projectId: const String.fromEnvironment('FIREBASE_PROJECT_ID'),
+    storageBucket: const String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
   );
 
 }```\n
@@ -106,58 +106,6 @@ class ModeratorApp extends StatelessWidget {
   }
 }
 ```\n
-\n### src/config/env_config.dart\n
-```dart
-// lib/config/env_config.dart
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
-class EnvConfig {
-  static String get geminiApiKey {
-    try {
-      return dotenv.get('GEMINI_API_KEY', fallback: '');
-    } catch (e) {
-      return '';
-    }
-  }
-
-  static String get elevenLabsApiKey {
-    try {
-      return dotenv.get('ELEVEN_LABS_API_KEY', fallback: '');
-    } catch (e) {
-      return '';
-    }
-  }
-
-  static String get elevenLabsVoiceId {
-    try {
-      return dotenv.get('ELEVEN_LABS_VOICE_ID', fallback: '');
-    } catch (e) {
-      return '';
-    }
-  }
-
-  static bool get isConfigured {
-    return geminiApiKey.isNotEmpty && 
-           elevenLabsApiKey.isNotEmpty && 
-           elevenLabsVoiceId.isNotEmpty;
-  }
-
-  static List<String> getMissingConfigurations() {
-    final missing = <String>[];
-    
-    if (geminiApiKey.isEmpty) {
-      missing.add('Gemini API Key');
-    }
-    if (elevenLabsApiKey.isEmpty) {
-      missing.add('ElevenLabs API Key');
-    }
-    if (elevenLabsVoiceId.isEmpty) {
-      missing.add('ElevenLabs Voice ID');
-    }
-    
-    return missing;
-  }
-}```\n
 \n### src/config/board_config.dart\n
 ```dart
 // lib/src/config/board_config.dart
@@ -1172,7 +1120,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:oloodi_scrabble_moderator_app/src/services/recognition_metrics_service.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/score_calculator.dart';
 import 'package:oloodi_scrabble_moderator_app/src/widgets/board_overlay_painter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -1393,16 +1341,20 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         }
 
         // Show confirmation dialog
-        final confirmed =
-            await _showMoveConfirmation(context, word, score, tiles);
+        final result = await _showMoveConfirmation(
+          context,
+          word,
+          score,
+          tiles,
+        );
 
-        if (confirmed == true && mounted) {
+        if (result != null && mounted) {
           // Add move to session
           await gameState.addMove(
-            word: word,
-            score: score,
+            word: result['word'],
+            score: result['score'],
             playerId: session.currentPlayerId,
-            tiles: tiles,
+            tiles: List<Map<String, dynamic>>.from(result['tiles']),
             imagePath: imagePath,
           );
 
@@ -1429,7 +1381,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     }
   }
 
-  Future<bool?> _showMoveConfirmation(
+  Future<Map<String, dynamic>?> _showMoveConfirmation(
     BuildContext context,
     String word,
     int score,
@@ -1444,7 +1396,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         ? tiles[0]['row'] == tiles[1]['row']
         : true; // Default to horizontal for single letter
 
-    return showDialog<bool>(
+    return showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
@@ -1466,6 +1418,23 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Word Editor
+                    TextField(
+                      controller: TextEditingController(text: word),
+                      decoration: const InputDecoration(
+                        labelText: 'Word',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          word = value.toUpperCase();
+                          hasBeenEdited = true;
+                        });
+                      },
+                      textCapitalization: TextCapitalization.characters,
+                    ),
+                    const SizedBox(height: 16),
+
                     // Starting position editor
                     Row(
                       children: [
@@ -1563,23 +1532,117 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     ),
                     const SizedBox(height: 16),
 
-                    // Preview of tiles
-                    const Text(
-                      'Tile Positions:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    // Tiles editor with Add Button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Tile Positions:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add Tile'),
+                          onPressed: () {
+                            // Create a new tile at the end of the word
+                            final newTile = Map<String, dynamic>.from({
+                              'letter': 'A',
+                              'points': 1,
+                              'row': editableTiles.isEmpty
+                                  ? 7
+                                  : editableTiles.last['row'],
+                              'col': editableTiles.isEmpty
+                                  ? 7
+                                  : editableTiles.last['col'] + 1,
+                            });
+
+                            setState(() {
+                              editableTiles.add(newTile);
+                              hasBeenEdited = true;
+                              // Recalculate positions after adding new tile
+                              _recalculatePositions(
+                                editableTiles,
+                                startRow: editableTiles.first['row'],
+                                startCol: editableTiles.first['col'],
+                                isHorizontal: isHorizontal,
+                              );
+                            });
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
-                    ...editableTiles.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final tile = entry.value;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
+                    if (editableTiles.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16.0),
                         child: Text(
-                          '${tile['letter']}: Row ${tile['row']}, Col ${tile['col']}',
-                          style: const TextStyle(fontFamily: 'monospace'),
+                          'No tiles added yet. Click "Add Tile" to begin.',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
-                      );
-                    }),
+                      )
+                    else
+                      ...editableTiles.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final tile = entry.value;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Theme.of(context).primaryColor,
+                              child: Text(
+                                tile['letter'],
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            title: Text(
+                                '${tile['letter']}: Points ${tile['points']}'),
+                            subtitle: Text(
+                              'Row ${tile['row']}, Col ${tile['col']}',
+                              style: const TextStyle(fontFamily: 'monospace'),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit),
+                                  onPressed: () => _showTileEditor(
+                                    context,
+                                    tile,
+                                    (updatedTile) {
+                                      setState(() {
+                                        editableTiles[index] = updatedTile;
+                                        hasBeenEdited = true;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete),
+                                  color: Colors.red,
+                                  onPressed: () {
+                                    setState(() {
+                                      editableTiles.removeAt(index);
+                                      hasBeenEdited = true;
+                                      if (editableTiles.isNotEmpty) {
+                                        // Recalculate positions after removing tile
+                                        _recalculatePositions(
+                                          editableTiles,
+                                          startRow: editableTiles.first['row'],
+                                          startCol: editableTiles.first['col'],
+                                          isHorizontal: isHorizontal,
+                                        );
+                                      }
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
 
                     if (hasBeenEdited) ...[
                       const SizedBox(height: 16),
@@ -1597,15 +1660,28 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context, false),
+                  onPressed: () => Navigator.pop(context),
                   child: const Text('Retake'),
                 ),
                 TextButton(
-                  onPressed: () async {
+                  onPressed: () {
+                    // Recalculate score based on updated tiles if needed
+                    int updatedScore = score;
                     if (hasBeenEdited) {
-                      // Save recognition metrics if needed
+                      updatedScore = ScoreCalculator.calculateScore(
+                        editableTiles,
+                        isFirstMove: word.length == editableTiles.length,
+                      );
                     }
-                    Navigator.pop(context, true);
+
+                    // Return a map containing all the updated information
+                    Navigator.pop(context, {
+                      'confirmed': true,
+                      'word': word,
+                      'score': updatedScore,
+                      'tiles': editableTiles,
+                      'hasBeenEdited': hasBeenEdited
+                    });
                   },
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.green,
@@ -1620,6 +1696,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     );
   }
 
+// Helper method to recalculate positions (preserved from original implementation)
   void _recalculatePositions(
     List<Map<String, dynamic>> tiles, {
     required int startRow,
@@ -1637,6 +1714,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     }
   }
 
+// Enhanced tile editor dialog
   Future<void> _showTileEditor(
     BuildContext context,
     Map<String, dynamic> tile,
@@ -1645,47 +1723,34 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     final letterController = TextEditingController(text: tile['letter']);
     final pointsController =
         TextEditingController(text: tile['points'].toString());
-    final rowController = TextEditingController(text: tile['row'].toString());
-    final colController = TextEditingController(text: tile['col'].toString());
 
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Edit Tile'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: letterController,
-                  decoration: const InputDecoration(labelText: 'Letter'),
-                  textCapitalization: TextCapitalization.characters,
-                  maxLength: 1,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: letterController,
+                decoration: const InputDecoration(
+                  labelText: 'Letter',
+                  border: OutlineInputBorder(),
                 ),
-                TextField(
-                  controller: pointsController,
-                  decoration: const InputDecoration(labelText: 'Points'),
-                  keyboardType: TextInputType.number,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 1,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pointsController,
+                decoration: const InputDecoration(
+                  labelText: 'Points',
+                  border: OutlineInputBorder(),
                 ),
-                TextField(
-                  controller: rowController,
-                  decoration: const InputDecoration(
-                    labelText: 'Row',
-                    helperText: 'Valid range: 0-14',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                TextField(
-                  controller: colController,
-                  decoration: const InputDecoration(
-                    labelText: 'Column',
-                    helperText: 'Valid range: 0-14',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ],
-            ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -1694,19 +1759,8 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
             ),
             TextButton(
               onPressed: () {
-                // Validate input
-                final row = int.tryParse(rowController.text);
-                final col = int.tryParse(colController.text);
                 final points = int.tryParse(pointsController.text);
-
-                if (letterController.text.isEmpty ||
-                    row == null ||
-                    row < 0 ||
-                    row > 14 ||
-                    col == null ||
-                    col < 0 ||
-                    col > 14 ||
-                    points == null) {
+                if (letterController.text.isEmpty || points == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter valid values'),
@@ -1716,12 +1770,11 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                   return;
                 }
 
-                onUpdate({
-                  'letter': letterController.text.toUpperCase(),
-                  'points': points,
-                  'row': row,
-                  'col': col,
-                });
+                final updatedTile = Map<String, dynamic>.from(tile)
+                  ..['letter'] = letterController.text.toUpperCase()
+                  ..['points'] = points;
+
+                onUpdate(updatedTile);
                 Navigator.pop(context);
               },
               child: const Text('Save'),
@@ -2287,7 +2340,7 @@ import '../models/game_session.dart';
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
     app: FirebaseFirestore.instance.app,
-    databaseId: "scrabble",
+    databaseId: const String.fromEnvironment('FIREBASE_DATABASE_ID'),
   );
   final _uuid = const Uuid();
 
@@ -3856,7 +3909,6 @@ dependencies:
   uuid: ^4.3.3
   intl: ^0.18.1
   permission_handler: ^11.3.1
-  flutter_dotenv: ^5.2.1
   firebase_storage: ^11.6.5
   json_annotation: ^4.9.0
   image_cropper: ^8.1.0

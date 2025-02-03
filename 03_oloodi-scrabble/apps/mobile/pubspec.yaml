@@ -34,9 +34,6 @@ dependencies:
   animations: ^2.0.11
   flutter_animate: ^4.5.0
   
-  # Gemini SDK
-  google_generative_ai: ^0.2.0
-  
   # Storage and Database
   shared_preferences: ^2.5.1
   sqflite: ^2.3.2

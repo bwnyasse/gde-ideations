@@ -53,11 +53,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCHk-o2MoCxroAM5rjhVsGI77RZi2drqfM',
-    appId: '1:553140087820:android:a8c79c54f1da5c6ed51229',
-    messagingSenderId: '553140087820',
-    projectId: 'learning-box-369917',
-    storageBucket: 'learning-box-369917.firebasestorage.app',
+    apiKey: const String.fromEnvironment('FIREBASE_API_KEY'),
+    appId: const String.fromEnvironment('FIREBASE_APP_ID'),
+    messagingSenderId: const String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID'),
+    projectId: const String.fromEnvironment('FIREBASE_PROJECT_ID'),
+    storageBucket: const String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
   );
 
 }

@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
     app: FirebaseFirestore.instance.app,
-    databaseId: "scrabble",
+    databaseId: const String.fromEnvironment('FIREBASE_DATABASE_ID'),
   );
   String? _gameId;
 

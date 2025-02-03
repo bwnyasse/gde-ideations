@@ -57,13 +57,13 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyA1mSVhEByfd3i4-MVHI5O48s8QsqORXj8',
-    appId: '1:553140087820:web:c6db42b98856c306d51229',
-    messagingSenderId: '553140087820',
-    projectId: 'learning-box-369917',
-    authDomain: 'learning-box-369917.firebaseapp.com',
-    storageBucket: 'learning-box-369917.firebasestorage.app',
-    measurementId: 'G-KX4ZKD5MPR',
+    apiKey: const String.fromEnvironment('FIREBASE_API_KEY'),
+    appId: const String.fromEnvironment('FIREBASE_APP_ID'),
+    messagingSenderId: const String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID'),
+    projectId: const String.fromEnvironment('FIREBASE_PROJECT_ID'),
+    authDomain: const String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
+    storageBucket: const String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
+    measurementId: const String.fromEnvironment('FIREBASE_MEASUREMENT_ID'),
   );
 }
 ```\n
@@ -192,7 +192,7 @@ class GameStateProvider with ChangeNotifier {
   bool _isGameOver = false;
   String? _gameId;
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  late AudioPlayer _audioPlayer;
   bool _isPlaying = false;
 
   // Add getters
@@ -207,6 +207,14 @@ class GameStateProvider with ChangeNotifier {
       : _aiService = aiService,
         _settings = settings {
     _initializeBoard();
+    _initializeAudioPlayer();
+  }
+
+  void _initializeAudioPlayer() {
+    _audioPlayer = AudioPlayer();
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      debugPrint('Audio player state changed: $state');
+    });
   }
 
   String getPlayerNameById(Color color, String playerId) {
@@ -510,24 +518,31 @@ class GameStateProvider with ChangeNotifier {
 
   Future<void> handleMoveExplanation(Color color, Move move) async {
     if (_isPlaying) {
-      await _audioPlayer.stop();
       _isPlaying = false;
+      await _audioPlayer.stop();
       notifyListeners();
       return;
     }
 
     try {
+      // Get the explanation first
       final explanation = await _aiService.generateMoveExplanation(
         getPlayerNameById(color, move.playerId),
         move,
         getPlayerScore(move.playerId),
       );
 
+      // Convert to speech
       final audioData =
           await _aiService.convertToSpeech(explanation, _settings.language);
 
-      await _audioPlayer.play(BytesSource(Uint8List.fromList(audioData)));
-      _isPlaying = true;
+      // Ensure audioData is not null and not empty
+      if (audioData.isEmpty) {
+        throw Exception('No audio data received');
+      }
+
+      // Create the audio source
+      final source = BytesSource(Uint8List.fromList(audioData));
 
       // Set up completion listener
       _audioPlayer.onPlayerComplete.listen((_) {
@@ -535,8 +550,12 @@ class GameStateProvider with ChangeNotifier {
         notifyListeners();
       });
 
+      // Play the audio
+      await _audioPlayer.play(source);
+      _isPlaying = true;
       notifyListeners();
     } catch (e) {
+      debugPrint('Audio playback error: $e');
       _isPlaying = false;
       notifyListeners();
       throw Exception('Failed to play move explanation: $e');
@@ -1805,7 +1824,7 @@ import 'package:flutter/material.dart';
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
     app: FirebaseFirestore.instance.app,
-    databaseId: "scrabble",
+    databaseId: const String.fromEnvironment('FIREBASE_DATABASE_ID'),
   );
   String? _gameId;
 
@@ -1994,33 +2013,72 @@ class AIService {
 
   Future<List<int>> convertToSpeech(String text, AppLanguage language) async {
     if (!_isTtsInitialized) {
+      debugPrint('TTS not initialized, attempting to initialize...');
       await _initializeTts();
       if (!_isTtsInitialized) {
         throw Exception('Failed to initialize Text-to-Speech service');
       }
     }
+    try {
+      debugPrint('Fetching available voices...');
+      final voicesResponse = await TtsGoogle.getVoices();
 
-    final voicesResponse = await TtsGoogle.getVoices();
+      if (voicesResponse.voices.isEmpty) {
+        throw Exception('No voices available');
+      }
 
-    // Define the voice parameters based on language
-    final targetVoice = language == AppLanguage.english
-        ? 'en-US-Wavenet-I' // English male voice
-        : 'fr-FR-Wavenet-D'; // French male voice
+  //     debugPrint('Available Voices:');
+  //     for (final voice in voicesResponse.voices) {
+  //       debugPrint('''
+  //   Code: ${voice.code}
+  //   Voice Type: ${voice.voiceType}
+  //   Name: ${voice.name}
+  //   Native Name: ${voice.nativeName}
+  //   Gender: ${voice.gender}
+  //   Locale: ${voice.locale.code}
+  //   Sample Rate: ${voice.sampleRateHertz}
+  //   -------------------------------------
+  // ''');
+  //     }
 
-    // Find the matching voice
-    final voice = voicesResponse.voices
-        .where((element) => element.name == targetVoice)
-        .toList(growable: false)
-        .first;
+      // Define the voice parameters based on language
+      final targetVoice = language == AppLanguage.english
+          ? 'en-US-Wavenet-I' // English male voice
+          : 'fr-FR-Wavenet-D'; // French male voice
 
-    TtsParamsGoogle params = TtsParamsGoogle(
-      voice: voice,
-      audioFormat: AudioOutputFormatGoogle.linear16,
-      text: text,
-    );
+      debugPrint('Looking for voice: $targetVoice');
 
-    final ttsResponse = await TtsGoogle.convertTts(params);
-    return ttsResponse.audio.buffer.asUint8List().toList();
+      // Find the matching voice
+      final voice = voicesResponse.voices
+          .where((element) => element.code == targetVoice)
+          .toList(growable: false)
+          .firstOrNull;
+
+      if (voice == null) {
+        throw Exception('Selected voice not found: $targetVoice');
+      }
+
+      debugPrint('Converting text to speech with voice: ${voice.name}');
+
+      TtsParamsGoogle params = TtsParamsGoogle(
+        voice: voice,
+        audioFormat: AudioOutputFormatGoogle.linear16,
+        text: text,
+      );
+
+      final ttsResponse = await TtsGoogle.convertTts(params);
+
+      if (ttsResponse.audio.buffer.lengthInBytes == 0) {
+        throw Exception('Received empty audio data from TTS service');
+      }
+      debugPrint(
+          'Successfully generated audio data: ${ttsResponse.audio.buffer.lengthInBytes} bytes');
+
+      return ttsResponse.audio.buffer.asUint8List().toList();
+    } catch (e) {
+      debugPrint('TTS Error: $e');
+      rethrow;
+    }
   }
 
   Future<void> dispose() async {
@@ -3948,9 +4006,6 @@ dependencies:
   # Animations
   animations: ^2.0.11
   flutter_animate: ^4.5.0
-  
-  # Gemini SDK
-  google_generative_ai: ^0.2.0
   
   # Storage and Database
   shared_preferences: ^2.5.1
