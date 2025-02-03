@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:oloodi_scrabble_moderator_app/src/services/score_calculator.dart';
 import 'package:oloodi_scrabble_moderator_app/src/widgets/board_overlay_painter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -223,16 +224,20 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         }
 
         // Show confirmation dialog
-        final confirmed =
-            await _showMoveConfirmation(context, word, score, tiles);
+        final result = await _showMoveConfirmation(
+          context,
+          word,
+          score,
+          tiles,
+        );
 
-        if (confirmed == true && mounted) {
+        if (result != null && mounted) {
           // Add move to session
           await gameState.addMove(
-            word: word,
-            score: score,
+            word: result['word'],
+            score: result['score'],
             playerId: session.currentPlayerId,
-            tiles: tiles,
+            tiles: List<Map<String, dynamic>>.from(result['tiles']),
             imagePath: imagePath,
           );
 
@@ -259,7 +264,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
     }
   }
 
-  Future<bool?> _showMoveConfirmation(
+  Future<Map<String, dynamic>?> _showMoveConfirmation(
     BuildContext context,
     String word,
     int score,
@@ -274,7 +279,7 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
         ? tiles[0]['row'] == tiles[1]['row']
         : true; // Default to horizontal for single letter
 
-    return showDialog<bool>(
+    return showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
@@ -410,47 +415,117 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
                     ),
                     const SizedBox(height: 16),
 
-                    // Tiles editor
-                    const Text(
-                      'Tile Positions:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    // Tiles editor with Add Button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Tile Positions:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add Tile'),
+                          onPressed: () {
+                            // Create a new tile at the end of the word
+                            final newTile = Map<String, dynamic>.from({
+                              'letter': 'A',
+                              'points': 1,
+                              'row': editableTiles.isEmpty
+                                  ? 7
+                                  : editableTiles.last['row'],
+                              'col': editableTiles.isEmpty
+                                  ? 7
+                                  : editableTiles.last['col'] + 1,
+                            });
+
+                            setState(() {
+                              editableTiles.add(newTile);
+                              hasBeenEdited = true;
+                              // Recalculate positions after adding new tile
+                              _recalculatePositions(
+                                editableTiles,
+                                startRow: editableTiles.first['row'],
+                                startCol: editableTiles.first['col'],
+                                isHorizontal: isHorizontal,
+                              );
+                            });
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
-                    ...editableTiles.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final tile = entry.value;
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Theme.of(context).primaryColor,
-                            child: Text(
-                              tile['letter'],
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                          title: Text(
-                              '${tile['letter']}: Points ${tile['points']}'),
-                          subtitle: Text(
-                            'Row ${tile['row']}, Col ${tile['col']}',
-                            style: const TextStyle(fontFamily: 'monospace'),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => _showTileEditor(
-                              context,
-                              tile,
-                              (updatedTile) {
-                                setState(() {
-                                  editableTiles[index] = updatedTile;
-                                  hasBeenEdited = true;
-                                });
-                              },
-                            ),
+                    if (editableTiles.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16.0),
+                        child: Text(
+                          'No tiles added yet. Click "Add Tile" to begin.',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
-                      );
-                    }),
+                      )
+                    else
+                      ...editableTiles.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final tile = entry.value;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Theme.of(context).primaryColor,
+                              child: Text(
+                                tile['letter'],
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            title: Text(
+                                '${tile['letter']}: Points ${tile['points']}'),
+                            subtitle: Text(
+                              'Row ${tile['row']}, Col ${tile['col']}',
+                              style: const TextStyle(fontFamily: 'monospace'),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit),
+                                  onPressed: () => _showTileEditor(
+                                    context,
+                                    tile,
+                                    (updatedTile) {
+                                      setState(() {
+                                        editableTiles[index] = updatedTile;
+                                        hasBeenEdited = true;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete),
+                                  color: Colors.red,
+                                  onPressed: () {
+                                    setState(() {
+                                      editableTiles.removeAt(index);
+                                      hasBeenEdited = true;
+                                      if (editableTiles.isNotEmpty) {
+                                        // Recalculate positions after removing tile
+                                        _recalculatePositions(
+                                          editableTiles,
+                                          startRow: editableTiles.first['row'],
+                                          startCol: editableTiles.first['col'],
+                                          isHorizontal: isHorizontal,
+                                        );
+                                      }
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
 
                     if (hasBeenEdited) ...[
                       const SizedBox(height: 16),
@@ -468,16 +543,28 @@ class _MoveCaptureScreenState extends State<MoveCaptureScreen>
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context, false),
+                  onPressed: () => Navigator.pop(context),
                   child: const Text('Retake'),
                 ),
                 TextButton(
                   onPressed: () {
-                    // Save recognition metrics if needed
+                    // Recalculate score based on updated tiles if needed
+                    int updatedScore = score;
                     if (hasBeenEdited) {
-                      // TODO: Save metrics
+                      updatedScore = ScoreCalculator.calculateScore(
+                        editableTiles,
+                        isFirstMove: word.length == editableTiles.length,
+                      );
                     }
-                    Navigator.pop(context, true);
+
+                    // Return a map containing all the updated information
+                    Navigator.pop(context, {
+                      'confirmed': true,
+                      'word': word,
+                      'score': updatedScore,
+                      'tiles': editableTiles,
+                      'hasBeenEdited': hasBeenEdited
+                    });
                   },
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.green,
